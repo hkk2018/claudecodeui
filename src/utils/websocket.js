@@ -6,8 +6,14 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef(null);
   // Use ref to store websocket so sendMessage always has access to current instance
   const wsRef = useRef(null);
+  // Track if we've already initiated connection to prevent double connect
+  const hasConnectedRef = useRef(false);
 
   const connect = useCallback(async () => {
+    // Prevent multiple simultaneous connection attempts
+    if (hasConnectedRef.current) return;
+    hasConnectedRef.current = true;
+
     try {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
 
@@ -23,6 +29,7 @@ export function useWebSocket() {
         const token = localStorage.getItem('auth-token');
         if (!token) {
           console.warn('No authentication token found for WebSocket connection');
+          hasConnectedRef.current = false;
           return;
         }
 
@@ -51,6 +58,7 @@ export function useWebSocket() {
         console.log('[WebSocket] Disconnected');
         wsRef.current = null;
         setIsConnected(false);
+        hasConnectedRef.current = false;
         
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -64,6 +72,7 @@ export function useWebSocket() {
 
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
+      hasConnectedRef.current = false;
     }
   }, []);
 
@@ -78,7 +87,7 @@ export function useWebSocket() {
         wsRef.current.close();
       }
     };
-  }, [connect]);
+  }, []); // Empty deps - connect is stable due to useCallback with empty deps
 
   // Use useCallback to ensure sendMessage always accesses current wsRef
   const sendMessage = useCallback((message) => {
@@ -92,7 +101,7 @@ export function useWebSocket() {
   }, []);
 
   return {
-    ws: wsRef.current,
+    ws: wsRef.current,  // Return current value for backward compatibility (truthiness checks)
     sendMessage,
     messages,
     isConnected
