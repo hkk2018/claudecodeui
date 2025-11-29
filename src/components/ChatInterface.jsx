@@ -2890,7 +2890,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete', 'claude-error'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
 
       // For new sessions (currentSessionId is null), allow messages through
@@ -3142,24 +3142,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'claude-error':
-          // Reset loading state when an error occurs
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          
           setChatMessages(prev => [...prev, {
             type: 'error',
             content: `Error: ${latestMessage.error}`,
             timestamp: new Date()
           }]);
-          
-          // Mark session as inactive if we have one
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
-          }
-          if (currentSessionId && onSessionNotProcessing) {
-            onSessionNotProcessing(currentSessionId);
-          }
           break;
           
         case 'cursor-system':
