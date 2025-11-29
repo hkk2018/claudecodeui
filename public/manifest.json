@@ -66,14 +66,14 @@
   "screenshots": [
     {
       "src": "/screenshots/desktop-main.png",
-      "sizes": "1280x720",
+      "sizes": "2550x1644",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Claude Code UI Desktop View"
     },
     {
       "src": "/screenshots/mobile-chat.png",
-      "sizes": "390x844",
+      "sizes": "980x1644",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Claude Code UI Mobile Chat"
