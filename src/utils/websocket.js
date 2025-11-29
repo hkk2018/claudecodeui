@@ -6,13 +6,12 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef(null);
   // Use ref to store websocket so sendMessage always has access to current instance
   const wsRef = useRef(null);
-  // Track if we've already initiated connection to prevent double connect
-  const hasConnectedRef = useRef(false);
 
   const connect = useCallback(async () => {
-    // Prevent multiple simultaneous connection attempts
-    if (hasConnectedRef.current) return;
-    hasConnectedRef.current = true;
+    // Don't reconnect if already connected or connecting
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
 
     try {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
@@ -29,7 +28,6 @@ export function useWebSocket() {
         const token = localStorage.getItem('auth-token');
         if (!token) {
           console.warn('No authentication token found for WebSocket connection');
-          hasConnectedRef.current = false;
           return;
         }
 
@@ -38,10 +36,10 @@ export function useWebSocket() {
       }
 
       const websocket = new WebSocket(wsUrl);
+      wsRef.current = websocket;
 
       websocket.onopen = () => {
         console.log('[WebSocket] Connected');
-        wsRef.current = websocket;
         setIsConnected(true);
       };
 
@@ -58,7 +56,6 @@ export function useWebSocket() {
         console.log('[WebSocket] Disconnected');
         wsRef.current = null;
         setIsConnected(false);
-        hasConnectedRef.current = false;
         
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -72,7 +69,12 @@ export function useWebSocket() {
 
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
-      hasConnectedRef.current = false;
+      wsRef.current = null;
+      
+      // Attempt to reconnect after error
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connect();
+      }, 3000);
     }
   }, []);
 
@@ -85,6 +87,7 @@ export function useWebSocket() {
       }
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, []); // Empty deps - connect is stable due to useCallback with empty deps
