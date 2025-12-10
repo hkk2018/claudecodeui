@@ -5,12 +5,13 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, LayoutList } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
+import MessagesView from './MessagesView';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
@@ -76,6 +77,24 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+
+  // View mode state - 'projects' or 'messages'
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem('sidebarViewMode') || 'projects';
+    } catch {
+      return 'projects';
+    }
+  });
+
+  // Persist view mode to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('sidebarViewMode', viewMode);
+    } catch (error) {
+      console.error('Error saving view mode:', error);
+    }
+  }, [viewMode]);
 
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
@@ -581,30 +600,61 @@ function Sidebar({
         </div>
       </div>
 
-      {/* Search Filter and Actions */}
+      {/* View Mode Toggle + Search Filter and Actions */}
       {projects.length > 0 && !isLoading && (
         <div className="px-3 md:px-4 py-2 border-b border-border space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search projects..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
-            />
-            {searchFilter && (
-              <button
-                onClick={() => setSearchFilter('')}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
-              >
-                <X className="w-3 h-3 text-muted-foreground" />
-              </button>
-            )}
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg">
+            <button
+              onClick={() => setViewMode('projects')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                viewMode === 'projects'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Folder className="w-3.5 h-3.5" />
+              Projects
+            </button>
+            <button
+              onClick={() => setViewMode('messages')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                viewMode === 'messages'
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              Messages
+            </button>
           </div>
 
-          {/* Action Buttons - Desktop only */}
-          {!isMobile && (
+          {/* Search - Only show in projects view */}
+          {viewMode === 'projects' && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search projects..."
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+              />
+              {searchFilter && (
+                <button
+                  onClick={() => setSearchFilter('')}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+                >
+                  <X className="w-3 h-3 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons - Desktop only, projects view only */}
+          {!isMobile && viewMode === 'projects' && (
             <div className="flex gap-2">
               <Button
                 variant="default"
@@ -638,7 +688,21 @@ function Sidebar({
         </div>
       )}
       
+      {/* Messages View */}
+      {viewMode === 'messages' && !isLoading && projects.length > 0 && (
+        <MessagesView
+          projects={projects}
+          selectedSession={selectedSession}
+          onSessionSelect={onSessionSelect}
+          onProjectSelect={handleProjectSelect}
+          currentTime={currentTime}
+          isMobile={isMobile}
+          isPWA={isPWA}
+        />
+      )}
+
       {/* Projects List */}
+      {viewMode === 'projects' && (
       <ScrollArea className="flex-1 md:px-2 md:py-3 overflow-y-auto overscroll-contain">
         <div className="md:space-y-1 pb-safe-area-inset-bottom">
           {isLoading ? (
@@ -1294,7 +1358,8 @@ function Sidebar({
           )}
         </div>
       </ScrollArea>
-      
+      )}
+
       {/* Version Update Notification */}
       {updateAvailable && (
         <div className="md:p-2 border-t border-border/50 flex-shrink-0">
