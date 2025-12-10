@@ -52,7 +52,12 @@ export function useWebSocket() {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          setMessages(prev => [...prev, data]);
+          // Limit message buffer to prevent memory bloat
+          // Only keep the most recent 50 messages since consumers only read the latest
+          setMessages(prev => {
+            const newMessages = [...prev, data];
+            return newMessages.slice(-50);
+          });
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }

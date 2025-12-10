@@ -8,6 +8,9 @@ export default defineConfig(({ command, mode }) => {
   
   return {
     plugins: [react()],
+    define: {
+      __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    },
     server: {
       port: parseInt(env.VITE_PORT) || 5173,
       proxy: {

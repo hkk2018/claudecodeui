@@ -2642,16 +2642,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 50px of the bottom
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Consider "near bottom" if within 150px of the bottom (for load more messages)
+    return scrollHeight - scrollTop - clientHeight < 150;
+  }, []);
+
+  // Check if user is at the very bottom (for auto-scroll behavior)
+  const isAtBottom = useCallback(() => {
+    if (!scrollContainerRef.current) return false;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    // Only consider "at bottom" if within 5px (essentially at bottom)
+    return scrollHeight - scrollTop - clientHeight < 5;
   }, []);
 
   // Handle scroll events to detect when user manually scrolls up and load more messages
   const handleScroll = useCallback(async () => {
     if (scrollContainerRef.current) {
       const container = scrollContainerRef.current;
-      const nearBottom = isNearBottom();
-      setIsUserScrolledUp(!nearBottom);
+      const atBottom = isAtBottom();
+      // Only allow auto-scroll if user is at the very bottom (within 5px)
+      setIsUserScrolledUp(!atBottom);
       
       // Check if we should load more messages (scrolled near top)
       const scrolledNearTop = container.scrollTop < 100;
@@ -2680,7 +2689,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-  }, [isNearBottom, hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
+  }, [isAtBottom, hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
 
   useEffect(() => {
     // Load session messages when session changes
@@ -2808,8 +2817,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setSessionMessages(messages);
             // convertedMessages will be automatically updated via useMemo
 
-            // Smart scroll behavior: only auto-scroll if user is near bottom
-            if (isNearBottom && autoScrollToBottom) {
+            // Smart scroll behavior: only auto-scroll if user is at the very bottom
+            if (isAtBottom() && autoScrollToBottom) {
               setTimeout(() => scrollToBottom(), 200);
             }
             // If user scrolled up, preserve their position (they're reading history)
@@ -2821,7 +2830,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       reloadExternalMessages();
     }
-  }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isNearBottom, autoScrollToBottom, scrollToBottom]);
+  }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isAtBottom, autoScrollToBottom, scrollToBottom]);
 
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
@@ -2893,10 +2902,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
 
+      // Extract session ID from message - it can be in different places depending on message type
+      const messageSessionId = latestMessage.sessionId || latestMessage.data?.session_id;
+
       // For new sessions (currentSessionId is null), allow messages through
-      if (!isGlobalMessage && latestMessage.sessionId && currentSessionId && latestMessage.sessionId !== currentSessionId) {
-        // Message is for a different session, ignore it
-        console.log('⏭️ Skipping message for different session:', latestMessage.sessionId, 'current:', currentSessionId);
+      // For existing sessions, only process messages that match the current session
+      if (!isGlobalMessage && messageSessionId && currentSessionId && messageSessionId !== currentSessionId) {
+        // Message is for a different session, ignore it completely (no rerender)
         return;
       }
 
@@ -2987,21 +2999,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // We detect this by checking for system/init messages with session_id that differs
           // from our current session. When found, we need to switch the user to the new session.
           // This works exactly like new session detection - preserve messages during navigation.
-          if (latestMessage.data.type === 'system' && 
-              latestMessage.data.subtype === 'init' && 
-              latestMessage.data.session_id && 
-              currentSessionId && 
-              latestMessage.data.session_id !== currentSessionId) {
-            
+          // IMPORTANT: Only navigate if this ChatInterface is still the active one (user hasn't switched away)
+          if (latestMessage.data.type === 'system' &&
+              latestMessage.data.subtype === 'init' &&
+              latestMessage.data.session_id &&
+              currentSessionId &&
+              latestMessage.data.session_id !== currentSessionId &&
+              selectedSession?.id === currentSessionId) { // ← Only navigate if user is still on this session
+
             console.log('🔄 Claude CLI session duplication detected:', {
               originalSession: currentSessionId,
               newSession: latestMessage.data.session_id
             });
-            
+
             // Mark this as a system-initiated session change to preserve messages
             // This works exactly like new session init - messages stay visible during navigation
             setIsSystemSessionChange(true);
-            
+
             // Switch to the new session using React Router navigation
             // This triggers the session loading logic in App.jsx without a page reload
             if (onNavigateToSession) {
@@ -3011,18 +3025,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           
           // Handle system/init for new sessions (when currentSessionId is null)
-          if (latestMessage.data.type === 'system' && 
-              latestMessage.data.subtype === 'init' && 
-              latestMessage.data.session_id && 
-              !currentSessionId) {
-            
+          // Only navigate if user is still on this session (hasn't switched away)
+          if (latestMessage.data.type === 'system' &&
+              latestMessage.data.subtype === 'init' &&
+              latestMessage.data.session_id &&
+              !currentSessionId &&
+              !selectedSession?.id) { // ← Only navigate if user hasn't selected another session
+
             console.log('🔄 New session init detected:', {
               newSession: latestMessage.data.session_id
             });
-            
+
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
-            
+
             // Switch to the new session
             if (onNavigateToSession) {
               onNavigateToSession(latestMessage.data.session_id);

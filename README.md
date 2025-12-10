@@ -25,6 +25,17 @@ This fork prioritizes the **multi-session, cross-project experience** optimized 
 
 ## What's Different?
 
+### Recent Changes (2024-12-11)
+
+#### 🔧 Multi-Session Stability
+- **Fixed message cross-contamination** - Messages no longer jump between sessions when multiple projects are active
+- **Improved session switching** - Can now switch sessions freely even while one is processing
+- **Network-first PWA caching** - Service Worker updated to always fetch latest version, fixing stale cache issues on mobile
+
+#### ✨ New Features
+- **About page with build info** - Settings → About now shows build timestamp for easy version verification
+- **Scrollable Settings tabs** - Tab navigation is now scrollable on mobile devices
+
 ### Planned Improvements
 - 🔄 **Cross-Session Workflow** - Better navigation between multiple active sessions
 - 📊 **Session Overview** - Quick status checks across projects from mobile

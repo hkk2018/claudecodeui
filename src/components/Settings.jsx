@@ -714,10 +714,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         <div className="flex-1 overflow-y-auto">
           {/* Tab Navigation */}
           <div className="border-b border-border">
-            <div className="flex px-4 md:px-6">
+            <div className="flex px-4 md:px-6 overflow-x-auto scrollbar-hide">
               <button
                 onClick={() => setActiveTab('tools')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'tools'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -727,7 +727,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'appearance'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -737,7 +737,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               </button>
               <button
                 onClick={() => setActiveTab('git')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'git'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -748,24 +748,34 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               </button>
               <button
                 onClick={() => setActiveTab('api')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'api'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Key className="w-4 h-4 inline mr-2" />
-                API & Tokens
+                API
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === 'tasks'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab('about')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                  activeTab === 'about'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                About
               </button>
             </div>
           </div>
@@ -2096,6 +2106,40 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {activeTab === 'api' && (
               <div className="space-y-6 md:space-y-8">
                 <CredentialsSettings />
+              </div>
+            )}
+
+            {/* About Tab */}
+            {activeTab === 'about' && (
+              <div className="space-y-6 md:space-y-8">
+                <div className="text-center py-8">
+                  <div className="flex justify-center mb-4">
+                    <ClaudeLogo className="w-16 h-16" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">Claude Code UI</h3>
+                  <p className="text-muted-foreground text-sm mb-6">
+                    A web interface for Claude Code
+                  </p>
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-w-md mx-auto">
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Build Time</span>
+                        <span className="text-foreground font-mono">
+                          {typeof __BUILD_TIME__ !== 'undefined'
+                            ? new Date(__BUILD_TIME__).toLocaleString()
+                            : 'Development'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Environment</span>
+                        <span className="text-foreground font-mono">
+                          {import.meta.env.MODE}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
