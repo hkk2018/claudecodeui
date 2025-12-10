@@ -33,6 +33,7 @@ This fork prioritizes the **multi-session, cross-project experience** optimized 
 - **Network-first PWA caching** - Service Worker updated to always fetch latest version, fixing stale cache issues on mobile
 
 #### ✨ New Features
+- **Messages View** - New chronological view that displays all conversations across projects sorted by time. See the last few messages from each session at a glance. Toggle between Projects and Messages views in the sidebar.
 - **About page with build info** - Settings → About now shows build timestamp for easy version verification
 - **Scrollable Settings tabs** - Tab navigation is now scrollable on mobile devices
 
@@ -84,6 +85,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 - **Responsive Design** - Works seamlessly across desktop, tablet, and mobile
 - **Interactive Chat Interface** - Built-in chat for Claude Code or Cursor
+- **Messages View** - Chronological view of all conversations across projects with message previews
 - **Integrated Shell Terminal** - Direct CLI access with web link support
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage, commit changes, and switch branches
