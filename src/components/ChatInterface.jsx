@@ -1640,7 +1640,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks, onSessionLoaded }) {
   const { tasksEnabled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -2162,11 +2162,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     } finally {
       if (isInitialLoad) {
         setIsLoadingSessionMessages(false);
+        // Notify parent that session has finished loading
+        if (onSessionLoaded) {
+          onSessionLoaded();
+        }
       } else {
         setIsLoadingMoreMessages(false);
       }
     }
-  }, [messagesOffset]);
+  }, [messagesOffset, onSessionLoaded]);
 
   // Load Cursor session messages from SQLite via backend
   const loadCursorSessionMessages = useCallback(async (projectPath, sessionId) => {
@@ -2476,8 +2480,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       return [];
     } finally {
       setIsLoadingSessionMessages(false);
+      // Notify parent that session has finished loading
+      if (onSessionLoaded) {
+        onSessionLoaded();
+      }
     }
-  }, []);
+  }, [onSessionLoaded]);
 
   // Actual diff calculation function
   const calculateDiff = (oldStr, newStr) => {

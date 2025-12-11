@@ -58,7 +58,9 @@ function MainContent({
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
   sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
   externalMessageUpdate,  // Trigger for external CLI updates to current session
-  showFloatingButton      // Show floating sidebar button (mobile only)
+  showFloatingButton,     // Show floating sidebar button (mobile only)
+  isSwitchingSession,     // Show loading overlay when switching sessions
+  onSessionLoaded         // Callback to clear loading overlay when session is loaded
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -467,7 +469,17 @@ function MainContent({
       </div>
 
       {/* Content Area with Right Sidebar */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        {/* Session Switching Loading Overlay */}
+        {isSwitchingSession && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <p className="text-sm font-medium text-foreground/70">Loading session...</p>
+            </div>
+          </div>
+        )}
+
         {/* Main Content */}
         <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${editingFile ? 'mr-0' : ''} ${editorExpanded ? 'hidden' : ''}`}>
           {activeTab === 'chat' && (
@@ -497,6 +509,7 @@ function MainContent({
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
+                onSessionLoaded={onSessionLoaded}
               />
             </ErrorBoundary>
             </div>

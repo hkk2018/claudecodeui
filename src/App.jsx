@@ -78,6 +78,9 @@ function AppContent() {
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
+  // Session Switching State: Track when user is switching sessions to show loading overlay
+  const [isSwitchingSession, setIsSwitchingSession] = useState(false);
+
   const { ws, sendMessage, messages } = useWebSocketContext();
   
   // Detect if running as PWA
@@ -362,6 +365,13 @@ function AppContent() {
   };
 
   const handleSessionSelect = (session) => {
+    // Show loading overlay immediately when switching sessions
+    setIsSwitchingSession(true);
+
+    // Clear loading overlay after a short delay (will be cleared when ChatInterface loads)
+    // This timeout is a safety net in case the component doesn't mount
+    setTimeout(() => setIsSwitchingSession(false), 500);
+
     setSelectedSession(session);
     // Only switch to chat tab when user explicitly selects a session
     // This prevents tab switching during automatic updates
@@ -901,6 +911,8 @@ function AppContent() {
           sendByCtrlEnter={sendByCtrlEnter}
           externalMessageUpdate={externalMessageUpdate}
           showFloatingButton={showFloatingButton}
+          isSwitchingSession={isSwitchingSession}
+          onSessionLoaded={() => setIsSwitchingSession(false)}
         />
       </div>
 
