@@ -66,7 +66,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
   const [codeEditorFontSize, setCodeEditorFontSize] = useState(() =>
     localStorage.getItem('codeEditorFontSize') || '14'
   );
-  
+
+  // Left-handed mode
+  const [leftHandedMode, setLeftHandedMode] = useState(() =>
+    localStorage.getItem('leftHandedMode') === 'true'
+  );
+
   // Cursor-specific states
   const [cursorAllowedCommands, setCursorAllowedCommands] = useState([]);
   const [cursorDisallowedCommands, setCursorDisallowedCommands] = useState([]);
@@ -337,6 +342,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
     localStorage.setItem('codeEditorFontSize', codeEditorFontSize);
     window.dispatchEvent(new Event('codeEditorSettingsChanged'));
   }, [codeEditorFontSize]);
+
+  useEffect(() => {
+    localStorage.setItem('leftHandedMode', leftHandedMode.toString());
+    window.dispatchEvent(new Event('leftHandedModeChanged'));
+  }, [leftHandedMode]);
 
   const loadSettings = async () => {
     try {
@@ -870,6 +880,36 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
             <span
               className={`${
                 showFloatingButton ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* Left-handed Mode */}
+    <div className="space-y-4">
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Left-handed Mode
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Swap send and image upload buttons (send on left, upload on right)
+            </div>
+          </div>
+          <button
+            onClick={() => setLeftHandedMode(!leftHandedMode)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={leftHandedMode}
+            aria-label="Toggle left-handed mode"
+          >
+            <span className="sr-only">Toggle left-handed mode</span>
+            <span
+              className={`${
+                leftHandedMode ? 'translate-x-7' : 'translate-x-1'
               } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
             />
           </button>

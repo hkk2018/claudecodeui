@@ -1705,6 +1705,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorModel, setCursorModel] = useState(() => {
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
+  const [leftHandedMode, setLeftHandedMode] = useState(() => {
+    return localStorage.getItem('leftHandedMode') === 'true';
+  });
   // Load permission mode for the current session
   useEffect(() => {
     if (selectedSession?.id) {
@@ -1749,6 +1752,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .catch(err => console.error('Error loading Cursor config:', err));
     }
   }, [provider]);
+
+  // Listen for left-handed mode changes from Settings
+  useEffect(() => {
+    const handleLeftHandedModeChange = () => {
+      const newMode = localStorage.getItem('leftHandedMode') === 'true';
+      setLeftHandedMode(newMode);
+    };
+
+    window.addEventListener('leftHandedModeChanged', handleLeftHandedModeChange);
+    return () => {
+      window.removeEventListener('leftHandedModeChanged', handleLeftHandedModeChange);
+    };
+  }, []);
 
   // Fetch slash commands on mount and when project changes
   useEffect(() => {
@@ -4697,21 +4713,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }}
               placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={isLoading}
-              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+              className={`chat-input-placeholder block w-full ${leftHandedMode ? 'pl-16 pr-12' : 'pl-12 pr-20'} sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200`}
               style={{ height: '50px' }}
             />
             {/* Image upload button */}
             <button
               type="button"
               onClick={open}
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className={`absolute ${leftHandedMode ? 'right-2' : 'left-2'} top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors`}
               title="Attach images"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </button>
-            
+
             {/* Mic button - HIDDEN */}
             <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
               <MicButton
@@ -4732,25 +4748,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.preventDefault();
                 handleSubmit(e);
               }}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+              className={`absolute ${leftHandedMode ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800`}
             >
-              <svg 
-                className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" 
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
                 />
               </svg>
             </button>
 
             {/* Hint text inside input box at bottom - Desktop only */}
-            <div className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
+            <div className={`absolute bottom-1 ${leftHandedMode ? 'left-16 right-12' : 'left-12 right-14'} sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
               input.trim() ? 'opacity-0' : 'opacity-100'
             }`}>
               {sendByCtrlEnter
