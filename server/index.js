@@ -1420,6 +1420,110 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
   }
 });
 
+// Get Claude usage/quota information via CLI
+app.get('/api/cli/claude/usage', authenticateToken, async (req, res) => {
+  try {
+    const ptyProcess = pty.spawn('claude', [], {
+      name: 'xterm-color',
+      cols: 120,
+      rows: 50,
+      cwd: os.homedir(),
+      env: process.env
+    });
+
+    let output = '';
+    let trustDone = false;
+    let usageSent = false;
+    let usageFound = false;
+    let timeoutId;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      try {
+        ptyProcess.kill();
+      } catch (e) {}
+    };
+
+    const parseUsage = (text) => {
+      // Strip ANSI codes
+      const clean = text.replace(/\x1b\[[0-9;]*[mGKHJ]/g, '').replace(/\[[\d;?]*[a-zA-Z]/g, '');
+
+      // Parse usage percentages and reset times
+      const sessionMatch = clean.match(/Current session[\s\S]*?(\d+)%\s*used[\s\S]*?Resets\s+([^\n]+)/);
+      const weekAllMatch = clean.match(/Current week \(all models\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets\s+([^\n]+)/);
+      const weekSonnetMatch = clean.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets\s+([^\n]+)/);
+      const extraUsageMatch = clean.match(/Extra usage\s*([\s\S]*?)(?:\n\n|Nov|\n[A-Z])/);
+
+      return {
+        session: sessionMatch ? {
+          used: parseInt(sessionMatch[1]),
+          resetTime: sessionMatch[2].trim()
+        } : null,
+        weekAll: weekAllMatch ? {
+          used: parseInt(weekAllMatch[1]),
+          resetTime: weekAllMatch[2].trim()
+        } : null,
+        weekSonnet: weekSonnetMatch ? {
+          used: parseInt(weekSonnetMatch[1]),
+          resetTime: weekSonnetMatch[2].trim()
+        } : null,
+        extraUsage: extraUsageMatch ? extraUsageMatch[1].trim() : null
+      };
+    };
+
+    ptyProcess.onData((data) => {
+      output += data;
+
+      // Accept trust prompt when we see it
+      if (data.includes('trust the files') && !trustDone) {
+        trustDone = true;
+        setTimeout(() => ptyProcess.write('\r'), 500);
+        return;
+      }
+
+      // When menu appears, select /usage with Enter
+      if (data.includes('/usage') && data.includes('Show plan usage') && !usageSent) {
+        usageSent = true;
+        setTimeout(() => ptyProcess.write('\r'), 200);
+      }
+
+      // Check for usage data
+      if (data.includes('Current session') || data.includes('Current week')) {
+        usageFound = true;
+      }
+
+      // When we have all data, parse and respond
+      if (usageFound && data.includes('Esc to exit')) {
+        cleanup();
+        const usage = parseUsage(output);
+        res.json({ success: true, usage });
+      }
+    });
+
+    // Send /usage command after CLI loads
+    setTimeout(() => {
+      ptyProcess.write('/usage');
+    }, 5000);
+
+    // Timeout after 20 seconds
+    timeoutId = setTimeout(() => {
+      cleanup();
+
+      // Try to parse whatever we got
+      if (usageFound) {
+        const usage = parseUsage(output);
+        res.json({ success: true, usage, partial: true });
+      } else {
+        res.status(500).json({ error: 'Timeout waiting for usage data' });
+      }
+    }, 20000);
+
+  } catch (error) {
+    console.error('Error getting Claude usage:', error);
+    res.status(500).json({ error: 'Failed to get Claude usage', details: error.message });
+  }
+});
+
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
   // Skip requests for static assets (files with extensions)

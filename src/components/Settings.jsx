@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, RefreshCw } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
@@ -89,6 +89,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
     email: null,
     loading: true,
     error: null
+  });
+  const [claudeUsage, setClaudeUsage] = useState({
+    loading: false,
+    error: null,
+    data: null,
+    lastUpdated: null
   });
   const [cursorAuthStatus, setCursorAuthStatus] = useState({
     authenticated: false,
@@ -313,9 +319,26 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
       loadSettings();
       checkClaudeAuthStatus();
       checkCursorAuthStatus();
+      fetchClaudeUsage();
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
+
+  // Format relative time (e.g., "5 minutes ago")
+  const formatRelativeTime = (date) => {
+    if (!date) return null;
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin === 1) return '1 minute ago';
+    if (diffMin < 60) return `${diffMin} minutes ago`;
+    if (diffHr === 1) return '1 hour ago';
+    return `${diffHr} hours ago`;
+  };
 
   // Persist code editor settings to localStorage
   useEffect(() => {
@@ -424,6 +447,43 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
         email: null,
         loading: false,
         error: error.message
+      });
+    }
+  };
+
+  const fetchClaudeUsage = async () => {
+    setClaudeUsage(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      const response = await authenticatedFetch('/api/cli/claude/usage');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setClaudeUsage({
+            loading: false,
+            error: null,
+            data: data.usage,
+            lastUpdated: new Date()
+          });
+        } else {
+          setClaudeUsage({
+            loading: false,
+            error: data.error || 'Failed to fetch usage',
+            data: null
+          });
+        }
+      } else {
+        setClaudeUsage({
+          loading: false,
+          error: 'Failed to fetch usage data',
+          data: null
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching Claude usage:', error);
+      setClaudeUsage({
+        loading: false,
+        error: error.message,
+        data: null
       });
     }
   };
@@ -1198,6 +1258,142 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
                     </Button>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Session Usage */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-yellow-500" />
+                  <h3 className="text-lg font-medium text-foreground">
+                    Usage Limits
+                  </h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  {claudeUsage.lastUpdated && (
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                      Updated {formatRelativeTime(claudeUsage.lastUpdated)}
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchClaudeUsage}
+                    disabled={claudeUsage.loading}
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${claudeUsage.loading ? 'animate-spin' : ''}`} />
+                    {claudeUsage.loading ? 'Loading...' : 'Refresh'}
+                  </Button>
+                </div>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                {claudeUsage.loading && !claudeUsage.data ? (
+                  <div className="text-center py-4 text-gray-500">
+                    Loading usage data... (this may take ~10 seconds)
+                  </div>
+                ) : claudeUsage.error && !claudeUsage.data ? (
+                  <div className="text-center py-4 text-red-500">
+                    {claudeUsage.error}
+                  </div>
+                ) : claudeUsage.data ? (
+                  <div className="space-y-4">
+                    {/* Current Session */}
+                    {claudeUsage.data.session && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">Current session</span>
+                          <span className={`font-medium ${
+                            claudeUsage.data.session.used >= 90 ? 'text-red-600 dark:text-red-400' :
+                            claudeUsage.data.session.used >= 70 ? 'text-orange-600 dark:text-orange-400' :
+                            'text-blue-600 dark:text-blue-400'
+                          }`}>{claudeUsage.data.session.used}% used</span>
+                        </div>
+                        <div className="w-full h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              claudeUsage.data.session.used >= 90 ? 'bg-red-500' :
+                              claudeUsage.data.session.used >= 70 ? 'bg-orange-500' :
+                              'bg-blue-500'
+                            }`}
+                            style={{ width: `${claudeUsage.data.session.used}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500">Resets {claudeUsage.data.session.resetTime}</div>
+                      </div>
+                    )}
+
+                    {/* Weekly (All Models) */}
+                    {claudeUsage.data.weekAll && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">Weekly (all models)</span>
+                          <span className={`font-medium ${
+                            claudeUsage.data.weekAll.used >= 90 ? 'text-red-600 dark:text-red-400' :
+                            claudeUsage.data.weekAll.used >= 70 ? 'text-orange-600 dark:text-orange-400' :
+                            'text-green-600 dark:text-green-400'
+                          }`}>{claudeUsage.data.weekAll.used}% used</span>
+                        </div>
+                        <div className="w-full h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              claudeUsage.data.weekAll.used >= 90 ? 'bg-red-500' :
+                              claudeUsage.data.weekAll.used >= 70 ? 'bg-orange-500' :
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${claudeUsage.data.weekAll.used}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500">Resets {claudeUsage.data.weekAll.resetTime}</div>
+                      </div>
+                    )}
+
+                    {/* Weekly (Sonnet Only) */}
+                    {claudeUsage.data.weekSonnet && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">Weekly (Sonnet only)</span>
+                          <span className={`font-medium ${
+                            claudeUsage.data.weekSonnet.used >= 90 ? 'text-red-600 dark:text-red-400' :
+                            claudeUsage.data.weekSonnet.used >= 70 ? 'text-orange-600 dark:text-orange-400' :
+                            'text-purple-600 dark:text-purple-400'
+                          }`}>{claudeUsage.data.weekSonnet.used}% used</span>
+                        </div>
+                        <div className="w-full h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              claudeUsage.data.weekSonnet.used >= 90 ? 'bg-red-500' :
+                              claudeUsage.data.weekSonnet.used >= 70 ? 'bg-orange-500' :
+                              'bg-purple-500'
+                            }`}
+                            style={{ width: `${claudeUsage.data.weekSonnet.used}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500">Resets {claudeUsage.data.weekSonnet.resetTime}</div>
+                      </div>
+                    )}
+
+                    {/* Extra Usage Info */}
+                    {claudeUsage.data.extraUsage && (
+                      <div className="text-xs text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        {claudeUsage.data.extraUsage}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchClaudeUsage}
+                    >
+                      Load Usage Data
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Click to fetch your current Claude usage limits
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

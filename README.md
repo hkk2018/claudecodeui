@@ -25,7 +25,12 @@ This fork prioritizes the **multi-session, cross-project experience** optimized 
 
 ## What's Different?
 
-### Recent Changes (2024-12-11)
+### Recent Changes (2024-12-12)
+
+#### ✨ New Features
+- **Usage Limits Display** - View your Claude API usage directly in Settings → Tools → Claude. Shows current session usage, weekly limits (all models), and weekly Sonnet-only limits with color-coded progress bars. Data auto-loads when opening Settings and shows "Updated X minutes ago" timestamp.
+
+### Previous Changes (2024-12-11)
 
 #### 🔧 Multi-Session Stability
 - **Fixed message cross-contamination** - Messages no longer jump between sessions when multiple projects are active
