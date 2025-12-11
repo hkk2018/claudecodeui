@@ -12,7 +12,7 @@ import TasksSettings from './TasksSettings';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 
-function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
+function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFloatingButton, setShowFloatingButton }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
@@ -843,6 +843,36 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             <option value="name">Alphabetical</option>
             <option value="date">Recent Activity</option>
           </select>
+        </div>
+      </div>
+    </div>
+
+    {/* Floating Sidebar Button (Mobile) */}
+    <div className="space-y-4">
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Floating Sidebar Button
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Show floating button to open sidebar (mobile only)
+            </div>
+          </div>
+          <button
+            onClick={() => setShowFloatingButton(!showFloatingButton)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={showFloatingButton}
+            aria-label="Toggle floating sidebar button"
+          >
+            <span className="sr-only">Toggle floating sidebar button</span>
+            <span
+              className={`${
+                showFloatingButton ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
         </div>
       </div>
     </div>

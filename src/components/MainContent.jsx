@@ -24,6 +24,7 @@ import TaskList from './TaskList';
 import TaskDetail from './TaskDetail';
 import PRDEditor from './PRDEditor';
 import Tooltip from './Tooltip';
+import FloatingSidebarButton from './FloatingSidebarButton';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
@@ -56,7 +57,8 @@ function MainContent({
   showThinking,           // Show thinking/reasoning sections
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
   sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
-  externalMessageUpdate   // Trigger for external CLI updates to current session
+  externalMessageUpdate,  // Trigger for external CLI updates to current session
+  showFloatingButton      // Show floating sidebar button (mobile only)
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -680,6 +682,13 @@ function MainContent({
           </div>
         </div>
       )}
+
+      {/* Floating Sidebar Button (Mobile Only) */}
+      <FloatingSidebarButton
+        onClick={onMenuClick}
+        isMobile={isMobile}
+        showFloatingButton={showFloatingButton}
+      />
     </div>
   );
 }

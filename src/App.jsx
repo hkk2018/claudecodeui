@@ -63,6 +63,7 @@ function AppContent() {
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
+  const [showFloatingButton, setShowFloatingButton] = useLocalStorage('showFloatingButton', true);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -899,6 +900,7 @@ function AppContent() {
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
           externalMessageUpdate={externalMessageUpdate}
+          showFloatingButton={showFloatingButton}
         />
       </div>
 
@@ -935,6 +937,8 @@ function AppContent() {
         onClose={() => setShowSettings(false)}
         projects={projects}
         initialTab={settingsInitialTab}
+        showFloatingButton={showFloatingButton}
+        setShowFloatingButton={setShowFloatingButton}
       />
 
       {/* Version Upgrade Modal */}
