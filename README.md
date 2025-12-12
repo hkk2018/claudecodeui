@@ -30,6 +30,11 @@ This fork prioritizes the **multi-session, cross-project experience** optimized 
 #### ✨ New Features
 - **Usage Limits Display** - View your Claude API usage directly in Settings → Tools → Claude. Shows current session usage, weekly limits (all models), and weekly Sonnet-only limits with color-coded progress bars. Data auto-loads when opening Settings and shows "Updated X minutes ago" timestamp.
 
+#### 📱 UX Improvements
+- **Session switching feedback** - Loading overlay with spinner appears when switching between sessions for better visual feedback
+- **Left-handed mode** - New option in Settings → Appearance to swap send and image upload button positions for left-handed users on mobile
+- **Floating sidebar button** - Draggable floating button on mobile for quick sidebar access
+
 ### Previous Changes (2024-12-11)
 
 #### 🔧 Multi-Session Stability
