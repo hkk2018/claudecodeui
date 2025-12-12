@@ -2929,11 +2929,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Extract session ID from message - it can be in different places depending on message type
       const messageSessionId = latestMessage.sessionId || latestMessage.data?.session_id;
 
-      // For new sessions (currentSessionId is null), allow messages through
-      // For existing sessions, only process messages that match the current session
-      if (!isGlobalMessage && messageSessionId && currentSessionId && messageSessionId !== currentSessionId) {
-        // Message is for a different session, ignore it completely (no rerender)
-        return;
+      // Filter out messages that belong to other sessions:
+      // 1. For existing sessions (currentSessionId is set): Only accept messages with matching session ID
+      // 2. For new sessions (currentSessionId is null): Reject messages with explicit session IDs (they belong to other sessions)
+      // 3. Global messages always pass through
+      if (!isGlobalMessage && messageSessionId) {
+        if (currentSessionId && messageSessionId !== currentSessionId) {
+          // Message is for a different session, ignore it
+          return;
+        }
+        if (!currentSessionId) {
+          // This is a new session (no ID yet), reject messages with session IDs (they're from other sessions)
+          return;
+        }
       }
 
       switch (latestMessage.type) {
