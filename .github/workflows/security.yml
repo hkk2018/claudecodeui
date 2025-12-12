@@ -30,12 +30,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: TruffleHog Secret Scan
+      - name: TruffleHog Secret Scan (PR only)
+        if: github.event_name == 'pull_request'
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --only-verified
+
+      - name: TruffleHog Secret Scan (Push/Schedule)
+        if: github.event_name != 'pull_request'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
           extra_args: --only-verified
         # 沒有 continue-on-error，失敗會阻擋
 
@@ -210,7 +218,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run OSV-Scanner
-        uses: google/osv-scanner-action@v2
+        uses: google/osv-scanner-action@v1
         with:
           scan-args: |-
             --lockfile=package-lock.json
