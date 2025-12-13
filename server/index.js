@@ -8,6 +8,16 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Parse command line arguments (e.g., --port=9001)
+// CLI args take priority over environment variables to avoid child process inheritance
+const cliArgs = {};
+process.argv.slice(2).forEach(arg => {
+    const match = arg.match(/^--(\w+)=(.+)$/);
+    if (match) {
+        cliArgs[match[1]] = match[2];
+    }
+});
+
 // ANSI color codes for terminal output
 const colors = {
     reset: '\x1b[0m',
@@ -58,7 +68,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -766,19 +776,24 @@ function handleChatConnection(ws) {
                 const provider = data.provider || 'claude';
                 const sessionId = data.sessionId;
                 let isActive;
+                let startTime = null;
 
                 if (provider === 'cursor') {
                     isActive = isCursorSessionActive(sessionId);
+                    // Cursor doesn't track startTime yet
                 } else {
                     // Use Claude Agents SDK
-                    isActive = isClaudeSDKSessionActive(sessionId);
+                    const sessionInfo = getSessionInfo(sessionId);
+                    isActive = sessionInfo?.isActive || false;
+                    startTime = sessionInfo?.startTime || null;
                 }
 
                 ws.send(JSON.stringify({
                     type: 'session-status',
                     sessionId,
                     provider,
-                    isProcessing: isActive
+                    isProcessing: isActive,
+                    startTime: startTime
                 }));
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
@@ -1629,7 +1644,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
     });
 }
 
-const PORT = process.env.PORT || 3001;
+const PORT = cliArgs.port || process.env.PORT || 3001;
 
 // Initialize database and start server
 async function startServer() {

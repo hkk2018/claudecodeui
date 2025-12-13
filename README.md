@@ -120,7 +120,21 @@ npm install
 npm run dev
 ```
 
-The application will start at `http://localhost:3001` (or your configured PORT).
+The application will start at `http://localhost:3001` by default.
+
+**Custom Port Configuration:**
+
+You can customize the port using command line arguments or environment variables:
+
+```bash
+# Using command line argument (recommended)
+node server/index.js --port=9001
+
+# Using environment variable
+PORT=9001 npm run start
+
+# Priority: --port argument > PORT env variable > 3001 (default)
+```
 
 ### Alternative: Run from NPM (Upstream Version)
 
