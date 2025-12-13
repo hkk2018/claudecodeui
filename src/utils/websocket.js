@@ -1,25 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export function useWebSocket() {
-  const [ws, setWs] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef(null);
+  // Use ref to store websocket so sendMessage always has access to current instance
+  const wsRef = useRef(null);
 
-  useEffect(() => {
-    connect();
-    
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (ws) {
-        ws.close();
-      }
-    };
-  }, []); // Keep dependency array but add proper cleanup
+  const connect = useCallback(async () => {
+    // Don't reconnect if already connected or connecting
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
 
-  const connect = async () => {
     try {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
 
@@ -43,10 +36,11 @@ export function useWebSocket() {
       }
 
       const websocket = new WebSocket(wsUrl);
+      wsRef.current = websocket;
 
       websocket.onopen = () => {
+        console.log('[WebSocket] Connected');
         setIsConnected(true);
-        setWs(websocket);
       };
 
       websocket.onmessage = (event) => {
@@ -64,8 +58,9 @@ export function useWebSocket() {
       };
 
       websocket.onclose = () => {
+        console.log('[WebSocket] Disconnected');
+        wsRef.current = null;
         setIsConnected(false);
-        setWs(null);
         
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -79,19 +74,42 @@ export function useWebSocket() {
 
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
+      wsRef.current = null;
+      
+      // Attempt to reconnect after error
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connect();
+      }, 3000);
     }
-  };
+  }, []);
 
-  const sendMessage = (message) => {
-    if (ws && isConnected) {
-      ws.send(JSON.stringify(message));
+  useEffect(() => {
+    connect();
+    
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []); // Empty deps - connect is stable due to useCallback with empty deps
+
+  // Use useCallback to ensure sendMessage always accesses current wsRef
+  const sendMessage = useCallback((message) => {
+    const websocket = wsRef.current;
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      console.log('[WebSocket] Sending message:', message.type);
+      websocket.send(JSON.stringify(message));
     } else {
-      console.warn('WebSocket not connected');
+      console.warn('[WebSocket] Cannot send - not connected. readyState:', websocket?.readyState);
     }
-  };
+  }, []);
 
   return {
-    ws,
+    ws: wsRef.current,  // Return current value for backward compatibility (truthiness checks)
     sendMessage,
     messages,
     isConnected
