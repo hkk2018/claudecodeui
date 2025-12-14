@@ -81,6 +81,14 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 </tr>
 <tr>
 <td align="center" colspan="2">
+<h3>Messages View</h3>
+<img src="public/screenshots/messages-view.jpg" alt="Messages View" width="250">
+<br>
+<em>Chronological view of all conversations across projects</em>
+</td>
+</tr>
+<tr>
+<td align="center" colspan="2">
 <h3>CLI Selection</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
