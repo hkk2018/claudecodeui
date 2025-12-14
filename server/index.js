@@ -805,6 +805,9 @@ function handleChatConnection(ws) {
                     type: 'active-sessions',
                     sessions: activeSessions
                 }));
+            } else {
+                // Log unknown message types for debugging
+                console.log('[WARN] Unknown WebSocket message type:', data.type, data);
             }
         } catch (error) {
             console.error('[ERROR] Chat WebSocket error:', error.message);
