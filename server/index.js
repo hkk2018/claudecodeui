@@ -68,7 +68,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -805,6 +805,25 @@ function handleChatConnection(ws) {
                     type: 'active-sessions',
                     sessions: activeSessions
                 }));
+            } else if (data.type === 'permission-response') {
+                // Handle user's response to a permission request
+                console.log('[DEBUG] Permission response received:', data.requestId);
+                console.log('   Behavior:', data.behavior);
+
+                const success = resolvePermissionRequest(data.requestId, {
+                    behavior: data.behavior,
+                    message: data.message,
+                    updatedPermissions: data.updatedPermissions,
+                    interrupt: data.interrupt
+                });
+
+                if (!success) {
+                    console.error('[ERROR] Failed to resolve permission request:', data.requestId);
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        error: `Permission request ${data.requestId} not found or already resolved`
+                    }));
+                }
             }
         } catch (error) {
             console.error('[ERROR] Chat WebSocket error:', error.message);

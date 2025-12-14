@@ -1378,7 +1378,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       const lines = message.content.split('\n').filter(line => line.trim());
                       const questionLine = lines.find(line => line.includes('?')) || lines[0] || '';
                       const options = [];
-                      
+
                       // Parse the menu options
                       lines.forEach(line => {
                         // Match lines like "❯ 1. Yes" or "  2. No"
@@ -1392,13 +1392,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           });
                         }
                       });
-                      
+
                       return (
                         <>
                           <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
                             {questionLine}
                           </p>
-                          
+
                           {/* Option buttons */}
                           <div className="space-y-2 mb-4">
                             {options.map((option) => (
@@ -1429,7 +1429,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </button>
                             ))}
                           </div>
-                          
+
                           <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
                             <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
                               ⏳ Waiting for your response in the CLI
@@ -1441,6 +1441,146 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         </>
                       );
                     })()}
+                  </div>
+                </div>
+              </div>
+            ) : message.isPermissionRequest ? (
+              // Permission request from SDK - interactive UI
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-blue-900 dark:text-blue-100 text-base mb-2">
+                      Permission Required
+                    </h4>
+                    <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
+                      Claude wants to use the <span className="font-mono font-semibold bg-blue-100 dark:bg-blue-800/50 px-1.5 py-0.5 rounded">{message.permissionData?.toolName}</span> tool
+                    </p>
+
+                    {/* Show tool input details */}
+                    {message.permissionData?.toolInput && (
+                      <details className="mb-4">
+                        <summary className="text-xs text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 mb-1">
+                          View tool parameters
+                        </summary>
+                        <pre className="mt-2 p-2 bg-blue-100 dark:bg-blue-900/50 rounded text-xs font-mono overflow-x-auto max-h-40">
+                          {JSON.stringify(message.permissionData.toolInput, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+
+                    {/* Action buttons */}
+                    {!message.permissionResolved ? (
+                      <div className="flex flex-wrap gap-2">
+                        {/* Allow Once */}
+                        <button
+                          onClick={() => {
+                            if (sendMessage) {
+                              sendMessage({
+                                type: 'permission-response',
+                                requestId: message.permissionData.requestId,
+                                behavior: 'allow',
+                                updatedPermissions: []
+                              });
+                              // Mark as resolved in UI
+                              setChatMessages(prev => prev.map(m =>
+                                m === message ? { ...m, permissionResolved: true, permissionChoice: 'allowed' } : m
+                              ));
+                            }
+                          }}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Allow Once
+                        </button>
+
+                        {/* Always Allow (if suggestions available) */}
+                        {message.permissionData?.suggestions?.length > 0 && (
+                          <button
+                            onClick={() => {
+                              if (sendMessage) {
+                                sendMessage({
+                                  type: 'permission-response',
+                                  requestId: message.permissionData.requestId,
+                                  behavior: 'allow',
+                                  updatedPermissions: message.permissionData.suggestions
+                                });
+                                // Mark as resolved in UI
+                                setChatMessages(prev => prev.map(m =>
+                                  m === message ? { ...m, permissionResolved: true, permissionChoice: 'always-allowed' } : m
+                                ));
+                              }
+                            }}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                            Always Allow
+                          </button>
+                        )}
+
+                        {/* Deny */}
+                        <button
+                          onClick={() => {
+                            if (sendMessage) {
+                              sendMessage({
+                                type: 'permission-response',
+                                requestId: message.permissionData.requestId,
+                                behavior: 'deny',
+                                message: 'User denied permission',
+                                interrupt: true
+                              });
+                              // Mark as resolved in UI
+                              setChatMessages(prev => prev.map(m =>
+                                m === message ? { ...m, permissionResolved: true, permissionChoice: 'denied' } : m
+                              ));
+                            }
+                          }}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Deny
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={`flex items-center gap-2 text-sm font-medium ${
+                        message.permissionChoice === 'denied'
+                          ? 'text-red-700 dark:text-red-300'
+                          : 'text-green-700 dark:text-green-300'
+                      }`}>
+                        {message.permissionChoice === 'denied' ? (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            Permission denied
+                          </>
+                        ) : message.permissionChoice === 'always-allowed' ? (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                            Always allowed
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Permission granted
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3196,7 +3336,26 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date()
           }]);
           break;
-          
+
+        case 'permission-request':
+          // Handle permission request from SDK - display in chat with interactive buttons
+          console.log('🔐 Permission request received:', latestMessage.requestId);
+          console.log('   Tool:', latestMessage.toolName);
+          setChatMessages(prev => [...prev, {
+            type: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isPermissionRequest: true,
+            permissionData: {
+              requestId: latestMessage.requestId,
+              toolName: latestMessage.toolName,
+              toolInput: latestMessage.toolInput,
+              toolUseID: latestMessage.toolUseID,
+              suggestions: latestMessage.suggestions || []
+            }
+          }]);
+          break;
+
         case 'cursor-system':
           // Handle Cursor system/init messages similar to Claude
           try {
