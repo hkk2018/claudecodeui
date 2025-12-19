@@ -354,12 +354,20 @@ const markdownComponents = {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject, sendMessage, setChatMessages }) => {
+  // Permission requests should never be grouped with other messages
   const isGrouped = prevMessage && prevMessage.type === message.type &&
+                   !message.isPermissionRequest && !prevMessage.isPermissionRequest &&
                    ((prevMessage.type === 'assistant') ||
                     (prevMessage.type === 'user') ||
                     (prevMessage.type === 'tool') ||
                     (prevMessage.type === 'error'));
+
+  // Debug permission request rendering
+  if (message.isPermissionRequest) {
+    console.log('🎨 Rendering permission request: index=' + index + ', isGrouped=' + isGrouped + ', tool=' + message.permissionData?.toolName);
+  }
+
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
   React.useEffect(() => {
@@ -1446,7 +1454,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             ) : message.isPermissionRequest ? (
               // Permission request from SDK - interactive UI
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div data-permission-request="true" className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4" style={{ minHeight: '100px', border: '3px solid red' }}>
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1505,11 +1513,16 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           <button
                             onClick={() => {
                               if (sendMessage) {
+                                // Force destination to localSettings so permission is persisted to .claude/settings.local.json
+                                const persistedPermissions = message.permissionData.suggestions.map(s => ({
+                                  ...s,
+                                  destination: 'localSettings'
+                                }));
                                 sendMessage({
                                   type: 'permission-response',
                                   requestId: message.permissionData.requestId,
                                   behavior: 'allow',
-                                  updatedPermissions: message.permissionData.suggestions
+                                  updatedPermissions: persistedPermissions
                                 });
                                 // Mark as resolved in UI
                                 setChatMessages(prev => prev.map(m =>
@@ -1795,6 +1808,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     return [];
   });
+
+  // Debug: Monitor permission request messages
+  React.useEffect(() => {
+    const permissionMessages = chatMessages.filter(m => m.isPermissionRequest);
+    console.log('🔒 chatMessages count:', chatMessages.length, 'permission:', permissionMessages.length);
+  }, [chatMessages]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -2974,7 +2993,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             const projectPath = selectedProject.fullPath || selectedProject.path;
             const converted = await loadCursorSessionMessages(projectPath, selectedSession.id);
             setSessionMessages([]);
-            setChatMessages(converted);
+            // Preserve PENDING (unresolved) permission requests during reload
+            setChatMessages(prev => {
+              const pendingPermissionRequests = prev.filter(m => m.isPermissionRequest && !m.permissionResolved);
+              if (pendingPermissionRequests.length > 0) {
+                console.log('📌 Preserving', pendingPermissionRequests.length, 'pending permission request(s) during external message reload');
+                return [...converted, ...pendingPermissionRequests];
+              }
+              return converted;
+            });
           } else {
             // Reload Claude messages from API/JSONL
             const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
@@ -2997,9 +3024,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isAtBottom, autoScrollToBottom, scrollToBottom]);
 
   // Update chatMessages when convertedMessages changes
+  // Preserve PENDING (unresolved) permission request messages that are not part of sessionMessages
   useEffect(() => {
     if (sessionMessages.length > 0) {
-      setChatMessages(convertedMessages);
+      setChatMessages(prev => {
+        // Only preserve permission requests that are NOT yet resolved
+        // Resolved ones should be removed since they're no longer interactive
+        const pendingPermissionRequests = prev.filter(m => m.isPermissionRequest && !m.permissionResolved);
+        if (pendingPermissionRequests.length > 0) {
+          console.log('📌 Preserving', pendingPermissionRequests.length, 'pending permission request(s) during convertedMessages sync');
+          // Merge convertedMessages with pending permission requests
+          return [...convertedMessages, ...pendingPermissionRequests];
+        }
+        return convertedMessages;
+      });
     }
   }, [convertedMessages, sessionMessages]);
 
@@ -3341,19 +3379,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Handle permission request from SDK - display in chat with interactive buttons
           console.log('🔐 Permission request received:', latestMessage.requestId);
           console.log('   Tool:', latestMessage.toolName);
-          setChatMessages(prev => [...prev, {
-            type: 'assistant',
-            content: '',
-            timestamp: new Date(),
-            isPermissionRequest: true,
-            permissionData: {
-              requestId: latestMessage.requestId,
-              toolName: latestMessage.toolName,
-              toolInput: latestMessage.toolInput,
-              toolUseID: latestMessage.toolUseID,
-              suggestions: latestMessage.suggestions || []
-            }
-          }]);
+          console.log('   Current messages count:', chatMessages.length);
+          setChatMessages(prev => {
+            console.log('🔐 Adding permission request to messages, prev count:', prev.length);
+            const newMessages = [...prev, {
+              type: 'assistant',
+              content: '',
+              timestamp: new Date(),
+              isPermissionRequest: true,
+              permissionData: {
+                requestId: latestMessage.requestId,
+                toolName: latestMessage.toolName,
+                toolInput: latestMessage.toolInput,
+                toolUseID: latestMessage.toolUseID,
+                suggestions: latestMessage.suggestions || []
+              }
+            }];
+            console.log('🔐 New messages count:', newMessages.length);
+            return newMessages;
+          });
           break;
 
         case 'cursor-system':
@@ -3728,10 +3772,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   // Show only recent messages for better performance
   const visibleMessages = useMemo(() => {
-    if (chatMessages.length <= visibleMessageCount) {
-      return chatMessages;
-    }
-    return chatMessages.slice(-visibleMessageCount);
+    const result = chatMessages.length <= visibleMessageCount
+      ? chatMessages
+      : chatMessages.slice(-visibleMessageCount);
+    const permCount = result.filter(m => m.isPermissionRequest).length;
+    console.log('👁️ visibleMessages count:', result.length, 'permission:', permCount);
+    return result;
   }, [chatMessages, visibleMessageCount]);
 
   // Capture scroll position before render when auto-scroll is disabled
@@ -4591,6 +4637,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   showRawParameters={showRawParameters}
                   showThinking={showThinking}
                   selectedProject={selectedProject}
+                  sendMessage={sendMessage}
+                  setChatMessages={setChatMessages}
                 />
               );
             })}

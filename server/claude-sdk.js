@@ -436,6 +436,9 @@ function createCanUseTool(ws) {
     console.log(`   Request ID: ${requestId}`);
     console.log(`   Tool Use ID: ${toolUseID}`);
     console.log(`   Suggestions:`, suggestions ? suggestions.length : 0);
+    if (suggestions && suggestions.length > 0) {
+      console.log(`   Suggestions detail:`, JSON.stringify(suggestions, null, 2));
+    }
 
     // Create a promise that will be resolved when user responds
     const responsePromise = new Promise((resolve, reject) => {
