@@ -20,6 +20,88 @@ import os from 'os';
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
 
+// Permission request tracking: Map of request IDs to pending resolvers
+// Each entry: { resolve, reject, toolName, input, suggestions }
+const pendingPermissionRequests = new Map();
+
+/**
+ * Generates a unique ID for permission requests
+ * @returns {string} Unique permission request ID
+ */
+function generatePermissionRequestId() {
+  return `perm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Registers a pending permission request
+ * @param {string} requestId - Unique request ID
+ * @param {Object} resolver - Promise resolver { resolve, reject }
+ * @param {Object} metadata - Request metadata { toolName, input, suggestions, toolUseID }
+ */
+function registerPermissionRequest(requestId, resolver, metadata) {
+  pendingPermissionRequests.set(requestId, {
+    ...resolver,
+    ...metadata,
+    timestamp: Date.now()
+  });
+}
+
+/**
+ * Resolves a pending permission request with user's response
+ * @param {string} requestId - The permission request ID
+ * @param {Object} response - User's response { behavior, message, updatedPermissions }
+ * @returns {boolean} True if request was found and resolved
+ */
+function resolvePermissionRequest(requestId, response) {
+  const pending = pendingPermissionRequests.get(requestId);
+  if (!pending) {
+    console.log(`⚠️ Permission request ${requestId} not found`);
+    return false;
+  }
+
+  pendingPermissionRequests.delete(requestId);
+
+  // Build the PermissionResult based on user's response
+  let permissionResult;
+
+  if (response.behavior === 'allow') {
+    permissionResult = {
+      behavior: 'allow',
+      updatedInput: pending.input,
+      updatedPermissions: response.updatedPermissions || []
+    };
+  } else {
+    permissionResult = {
+      behavior: 'deny',
+      message: response.message || 'User denied the request',
+      interrupt: response.interrupt !== false // Default to true for deny
+    };
+  }
+
+  console.log(`✅ Permission request ${requestId} resolved:`, permissionResult.behavior);
+  pending.resolve(permissionResult);
+  return true;
+}
+
+/**
+ * Cleans up timed-out permission requests
+ * @param {number} timeoutMs - Timeout in milliseconds (default 5 minutes)
+ */
+function cleanupTimedOutPermissions(timeoutMs = 300000) {
+  const now = Date.now();
+  for (const [requestId, request] of pendingPermissionRequests.entries()) {
+    if (now - request.timestamp > timeoutMs) {
+      console.log(`⏰ Permission request ${requestId} timed out`);
+      request.resolve({
+        behavior: 'deny',
+        message: 'Permission request timed out',
+        interrupt: false
+      });
+      pendingPermissionRequests.delete(requestId);
+    }
+  }
+}
+
 /**
  * Maps CLI options to SDK-compatible options format
  * @param {Object} options - CLI options
@@ -339,6 +421,63 @@ async function loadMcpConfig(cwd) {
 }
 
 /**
+ * Creates a canUseTool callback that sends permission requests to frontend via WebSocket
+ * @param {Object} ws - WebSocket connection
+ * @returns {Function} canUseTool callback function
+ */
+function createCanUseTool(ws) {
+  return async (toolName, input, options) => {
+    const { signal, suggestions, toolUseID } = options;
+
+    // Generate unique request ID
+    const requestId = generatePermissionRequestId();
+
+    console.log(`🔐 Permission request for tool: ${toolName}`);
+    console.log(`   Request ID: ${requestId}`);
+    console.log(`   Tool Use ID: ${toolUseID}`);
+    console.log(`   Suggestions:`, suggestions ? suggestions.length : 0);
+    if (suggestions && suggestions.length > 0) {
+      console.log(`   Suggestions detail:`, JSON.stringify(suggestions, null, 2));
+    }
+
+    // Create a promise that will be resolved when user responds
+    const responsePromise = new Promise((resolve, reject) => {
+      // Register the pending request
+      registerPermissionRequest(requestId, { resolve, reject }, {
+        toolName,
+        input,
+        suggestions,
+        toolUseID
+      });
+
+      // Handle abort signal
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          pendingPermissionRequests.delete(requestId);
+          reject(new Error('Permission request aborted'));
+        }, { once: true });
+      }
+    });
+
+    // Send permission request to frontend
+    ws.send(JSON.stringify({
+      type: 'permission-request',
+      requestId,
+      toolName,
+      toolInput: input,
+      toolUseID,
+      suggestions: suggestions || [],
+      timestamp: Date.now()
+    }));
+
+    console.log(`📤 Permission request sent to frontend: ${requestId}`);
+
+    // Wait for user response
+    return responsePromise;
+  };
+}
+
+/**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
  * @param {Object} options - Query options
@@ -368,10 +507,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
 
-    // Create SDK query instance
+    // Create canUseTool callback for permission handling
+    const canUseTool = createCanUseTool(ws);
+
+    // Create SDK query instance with canUseTool callback
     const queryInstance = query({
       prompt: finalCommand,
-      options: sdkOptions
+      options: {
+        ...sdkOptions,
+        canUseTool
+      }
     });
 
     // Track the query instance for abort capability
@@ -519,10 +664,30 @@ function getActiveClaudeSDKSessions() {
   return getAllSessions();
 }
 
+/**
+ * Gets session info including active status and start time
+ * @param {string} sessionId - Session identifier
+ * @returns {Object|null} Session info or null if not found
+ */
+function getSessionInfo(sessionId) {
+  const session = getSession(sessionId);
+  if (!session) {
+    return null;
+  }
+  return {
+    isActive: session.status === 'active',
+    startTime: session.startTime,
+    status: session.status
+  };
+}
+
 // Export public API
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
-  getActiveClaudeSDKSessions
+  getActiveClaudeSDKSessions,
+  getSessionInfo,
+  resolvePermissionRequest,
+  cleanupTimedOutPermissions
 };
