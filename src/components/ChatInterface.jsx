@@ -1858,6 +1858,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  const [sessionStartTime, setSessionStartTime] = useState(null);
   const [provider, setProvider] = useState(() => {
     return localStorage.getItem('selected-provider') || 'claude';
   });
@@ -2898,28 +2899,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // The restore effect will set it back to true if needed
           setIsLoading(false);
 
-          // Check if the session is currently processing on the backend
-          if (ws && sendMessage) {
-            sendMessage({
-              type: 'check-session-status',
-              sessionId: selectedSession.id,
-              provider
-            });
-          }
         } else if (currentSessionId === null) {
           // Initial load - reset pagination but not token budget
           setMessagesOffset(0);
           setHasMoreMessages(false);
           setTotalMessages(0);
-
-          // Check if the session is currently processing on the backend
-          if (ws && sendMessage) {
-            sendMessage({
-              type: 'check-session-status',
-              sessionId: selectedSession.id,
-              provider
-            });
-          }
         }
         
         if (provider === 'cursor') {
@@ -2978,6 +2962,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     loadMessages();
   }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
+
+  // Check session status when switching sessions - separate effect to ensure ws/sendMessage are ready
+  useEffect(() => {
+    if (selectedSession && ws && sendMessage) {
+      const provider = localStorage.getItem('selected-provider') || 'claude';
+      sendMessage({
+        type: 'check-session-status',
+        sessionId: selectedSession.id,
+        provider
+      });
+    }
+  }, [selectedSession?.id, ws, sendMessage]);
 
   // External Message Update Handler: Reload messages when external CLI modifies current session
   // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
@@ -3101,7 +3097,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete', 'session-status'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
 
       // Extract session ID from message - it can be in different places depending on message type
@@ -3465,6 +3461,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
+            setSessionStartTime(null);
           }
 
           // Always mark the completed session as inactive and not processing
@@ -3562,6 +3559,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
+            setSessionStartTime(null);
 
             // Fetch updated token usage after message completes
             if (selectedProject && selectedSession?.id) {
@@ -3616,6 +3614,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
+            setSessionStartTime(null);
           }
 
           // Always mark the aborted session as inactive and not processing
@@ -3640,12 +3639,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           const statusSessionId = latestMessage.sessionId;
           const isCurrentSession = statusSessionId === currentSessionId ||
                                    (selectedSession && statusSessionId === selectedSession.id);
-          if (isCurrentSession && latestMessage.isProcessing) {
-            // Session is currently processing, restore UI state
-            setIsLoading(true);
-            setCanAbortSession(true);
-            if (onSessionProcessing) {
-              onSessionProcessing(statusSessionId);
+          if (isCurrentSession) {
+            if (latestMessage.isProcessing) {
+              // Session is currently processing, restore UI state
+              setIsLoading(true);
+              setCanAbortSession(true);
+              // Store the startTime from backend
+              if (latestMessage.startTime) {
+                setSessionStartTime(latestMessage.startTime);
+              }
+              if (onSessionProcessing) {
+                onSessionProcessing(statusSessionId);
+              }
+            } else {
+              // Session is not processing, clear startTime
+              setSessionStartTime(null);
             }
           }
           break;
@@ -4040,6 +4048,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       tokens: 0,
       can_interrupt: true
     });
+    // Set start time for new request
+    setSessionStartTime(Date.now());
     
     // Always scroll to bottom when user sends a message and reset scroll state
     setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Claude's response
@@ -4687,6 +4697,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 onAbort={handleAbortSession}
                 provider={provider}
                 showThinking={showThinking}
+                sessionStartTime={sessionStartTime}
               />
               </div>
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}

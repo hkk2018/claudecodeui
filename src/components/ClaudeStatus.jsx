@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
 
-function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
+function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude', sessionStartTime = null }) {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [animationPhase, setAnimationPhase] = useState(0);
   const [fakeTokens, setFakeTokens] = useState(0);
@@ -14,19 +14,20 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
       return;
     }
 
-    const startTime = Date.now();
+    // Use backend's startTime if available, otherwise use local time
+    const baseTime = sessionStartTime || Date.now();
     // Calculate random token rate once (30-50 tokens per second)
     const tokenRate = 30 + Math.random() * 20;
 
     const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const elapsed = Math.floor((Date.now() - baseTime) / 1000);
       setElapsedTime(elapsed);
       // Simulate token count increasing over time
       setFakeTokens(Math.floor(elapsed * tokenRate));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isLoading]);
+  }, [isLoading, sessionStartTime]);
 
   // Animate the status indicator
   useEffect(() => {
