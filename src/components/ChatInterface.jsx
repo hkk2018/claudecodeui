@@ -3105,7 +3105,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter out messages that belong to other sessions:
       // 1. For existing sessions (currentSessionId is set): Only accept messages with matching session ID
-      // 2. For new sessions (currentSessionId is null): Reject messages with explicit session IDs (they belong to other sessions)
+      // 2. For new sessions (currentSessionId is null): Check against pendingSessionId (if exists)
       // 3. Global messages always pass through
       if (!isGlobalMessage && messageSessionId) {
         if (currentSessionId && messageSessionId !== currentSessionId) {
@@ -3113,8 +3113,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           return;
         }
         if (!currentSessionId) {
-          // This is a new session (no ID yet), reject messages with session IDs (they're from other sessions)
-          return;
+          // This is a new session (no ID yet), check against pendingSessionId
+          const pendingSessionId = sessionStorage.getItem('pendingSessionId');
+          if (pendingSessionId && messageSessionId !== pendingSessionId) {
+            // Message is for a different session, ignore it
+            return;
+          }
+          // If no pendingSessionId yet, accept the message (it's the first message from our new session)
         }
       }
 
