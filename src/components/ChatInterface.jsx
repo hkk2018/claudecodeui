@@ -1,19 +1,29 @@
 /*
- * ChatInterface.jsx - Chat Component with Session Store
+ * ChatInterface.jsx - Chat Component with Session Signals
  *
- * SESSION STORE INTEGRATION:
- * ==========================
+ * SESSION SIGNALS INTEGRATION:
+ * ============================
  *
- * This component uses Zustand store (useSessionStore) to manage session messages:
- * - Each session's messages are stored independently in the store
+ * This component uses Preact Signals (sessionSignals.js) to manage session messages:
+ * - Each session's messages are stored independently in signals
  * - Switching sessions is instant if messages are already cached
  * - LRU cache strategy limits memory usage (max 10 sessions)
  * - No more Session Protection needed - sessions can be switched freely
+ * - No closure traps - signal.value always returns latest value
+ * - No dependency array issues - signals auto-track dependencies
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
-import { useSessionStore } from '../stores/sessionStore';
-import { useShallow } from 'zustand/react/shallow';
+import {
+  currentSessionId,
+  currentMessages,
+  currentPagination,
+  sessionCache,
+  isSessionCached,
+  switchToSession,
+  setSessionMessages as storeSetMessages,
+  prependSessionMessages as storePrependMessages,
+} from '../stores/sessionSignals';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -1785,20 +1795,15 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // Default pagination object - defined outside component to maintain stable reference
 const DEFAULT_PAGINATION = { offset: 0, hasMore: false, total: 0 };
 
-// ChatInterface: Main chat component with Session Store integration
+// ChatInterface: Main chat component with Session Signals integration
 //
-// Session Store manages messages for each session independently:
-// - Messages are cached in Zustand store with LRU eviction
+// Session Signals manages messages for each session independently:
+// - Messages are cached in signals with LRU eviction
 // - Switching sessions is instant if already cached
 // - No Session Protection needed - background sessions continue receiving messages
+// - No closure traps or dependency array issues
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionProcessing, onSessionNotProcessing, processingSessions, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks, onSessionLoaded }) {
   const { tasksEnabled } = useTasksSettings();
-
-  // Session Store - manages session messages with LRU caching
-  // Use selector to only subscribe to methods, not state changes
-  // This prevents re-render when background sessions update
-  // Session Store - access via getState() to avoid subscription-triggered re-renders
-  // Only keep selectors that are truly needed as reactive subscriptions
 
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1832,19 +1837,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const MESSAGES_PER_PAGE = 20;
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
 
-  // Derive pagination from store for current session - use shallow compare to prevent re-render
-  const storePagination = useSessionStore(
-    useShallow(state => {
-      const viewingId = state.viewingSessionId;
-      if (!viewingId || !state.sessionData[viewingId]) {
-        return DEFAULT_PAGINATION;
-      }
-      return state.sessionData[viewingId].pagination || DEFAULT_PAGINATION;
-    })
-  );
-  const messagesOffset = storePagination.offset;
-  const hasMoreMessages = storePagination.hasMore;
-  const totalMessages = storePagination.total;
+  // Derive pagination from signal - direct access, no selector needed
+  const paginationValue = currentPagination.value;
+  const messagesOffset = paginationValue.offset;
+  const hasMoreMessages = paginationValue.hasMore;
+  const totalMessages = paginationValue.total;
   const [permissionMode, setPermissionMode] = useState('default');
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
@@ -2318,9 +2315,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
 
     try {
-      // Get current offset from store
-      const currentPagination = useSessionStore.getState().getPagination(sessionId);
-      const currentOffset = loadMore ? currentPagination.offset : 0;
+      // Get current offset from signal store
+      const cached = sessionCache.value[sessionId];
+      const cachedPagination = cached?.pagination || { offset: 0, hasMore: false, total: 0 };
+      const currentOffset = loadMore ? cachedPagination.offset : 0;
 
       const response = await api.sessionMessages(projectName, sessionId, MESSAGES_PER_PAGE, currentOffset);
       if (!response.ok) {
@@ -2338,10 +2336,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       if (loadMore) {
         // Prepend older messages to existing ones in store
-        useSessionStore.getState().prependSessionMessages(sessionId, messages, pagination);
+        storePrependMessages(sessionId, messages, pagination);
       } else {
         // Set messages in store (initial load)
-        useSessionStore.getState().setSessionMessages(sessionId, messages, pagination);
+        storeSetMessages(sessionId, messages, pagination);
       }
 
       return messages;
@@ -2888,8 +2886,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const moreMessages = await loadSessionMessages(selectedProject.name, selectedSession.id, true);
 
         if (moreMessages.length > 0) {
-          // Update local sessionMessages from store (use getState to avoid dependency)
-          const updatedMessages = useSessionStore.getState().getCurrentSessionMessages();
+          // Update local sessionMessages from signal store
+          const updatedMessages = currentMessages.value;
           setSessionMessages(updatedMessages);
 
           // Restore scroll position after DOM update
@@ -2951,17 +2949,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsSystemSessionChange(false);
           }
         } else {
-          // For Claude, use Session Store for caching
+          // For Claude, use Session Signals for caching
           setCurrentSessionId(selectedSession.id);
-          useSessionStore.getState().switchSession(selectedSession.id);
+          switchToSession(selectedSession.id);
 
           // Only load messages from API if this is a user-initiated session change
           // For system-initiated changes, preserve existing messages and rely on WebSocket
           if (!isSystemSessionChange) {
             // Check if session is already cached in store
-            if (useSessionStore.getState().isSessionCached(selectedSession.id)) {
-              // Session is cached - use messages from store (instant switch)
-              const cachedMessages = useSessionStore.getState().getCurrentSessionMessages();
+            if (isSessionCached(selectedSession.id)) {
+              // Session is cached - use messages from signal (instant switch)
+              const cachedMessages = currentMessages.value;
               setSessionMessages(cachedMessages);
               console.log(`📦 Session ${selectedSession.id.slice(0, 8)} loaded from cache (${cachedMessages.length} messages)`);
             } else {
@@ -2985,7 +2983,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setSessionMessages([]);
         }
         setCurrentSessionId(null);
-        useSessionStore.getState().switchSession(null);
+        switchToSession(null);
         sessionStorage.removeItem('cursorSessionId');
       }
 
@@ -3165,8 +3163,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Store it temporarily until conversation completes (prevents premature session association)
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
-            // Update store with the new session ID
-            switchSession(latestMessage.sessionId);
+            // Update signal with the new session ID
+            switchToSession(latestMessage.sessionId);
           }
           break;
 
