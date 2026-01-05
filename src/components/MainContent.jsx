@@ -1,14 +1,11 @@
 /*
- * MainContent.jsx - Main Content Area with Session Protection Props Passthrough
- * 
- * SESSION PROTECTION PASSTHROUGH:
- * ===============================
- * 
- * This component serves as a passthrough layer for Session Protection functions:
- * - Receives session management functions from App.jsx
- * - Passes them down to ChatInterface.jsx
- * 
- * No session protection logic is implemented here - it's purely a props bridge.
+ * MainContent.jsx - Main Content Area
+ *
+ * This component manages the main content area including:
+ * - Chat interface with Claude/Cursor
+ * - File tree and code editor
+ * - Task list and PRD editor
+ * - Shell terminal
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -42,14 +39,9 @@ function MainContent({
   onMenuClick,
   isLoading,
   onInputFocusChange,
-  // Session Protection Props: Functions passed down from App.jsx to manage active session state
-  // These functions control when project updates are paused during active conversations
-  onSessionActive,        // Mark session as active when user sends message
-  onSessionInactive,      // Mark session as inactive when conversation completes/aborts
   onSessionProcessing,    // Mark session as processing (thinking/working)
   onSessionNotProcessing, // Mark session as not processing (finished thinking)
   processingSessions,     // Set of session IDs currently processing
-  onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
   onNavigateToSession,    // Navigate to a specific session (for Claude CLI session duplication workaround)
   onShowSettings,         // Show tools settings panel
   autoExpandTools,        // Auto-expand tool accordions
@@ -494,12 +486,9 @@ function MainContent({
                 messages={messages}
                 onFileOpen={handleFileOpen}
                 onInputFocusChange={onInputFocusChange}
-                onSessionActive={onSessionActive}
-                onSessionInactive={onSessionInactive}
                 onSessionProcessing={onSessionProcessing}
                 onSessionNotProcessing={onSessionNotProcessing}
                 processingSessions={processingSessions}
-                onReplaceTemporarySession={onReplaceTemporarySession}
                 onNavigateToSession={onNavigateToSession}
                 onShowSettings={onShowSettings}
                 autoExpandTools={autoExpandTools}
