@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
+import { useShallow } from 'zustand/react/shallow';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -1781,6 +1782,9 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
   );
 };
 
+// Default pagination object - defined outside component to maintain stable reference
+const DEFAULT_PAGINATION = { offset: 0, hasMore: false, total: 0 };
+
 // ChatInterface: Main chat component with Session Store integration
 //
 // Session Store manages messages for each session independently:
@@ -1791,16 +1795,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const { tasksEnabled } = useTasksSettings();
 
   // Session Store - manages session messages with LRU caching
-  const {
-    viewingSessionId,
-    setSessionMessages: storeSetSessionMessages,
-    prependSessionMessages,
-    switchSession,
-    getCurrentSessionMessages,
-    getCurrentPagination,
-    isSessionCached,
-    updatePagination,
-  } = useSessionStore();
+  // Use selector to only subscribe to methods, not state changes
+  // This prevents re-render when background sessions update
+  // Session Store - access via getState() to avoid subscription-triggered re-renders
+  // Only keep selectors that are truly needed as reactive subscriptions
 
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1834,8 +1832,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const MESSAGES_PER_PAGE = 20;
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
 
-  // Derive pagination from store for current session
-  const storePagination = getCurrentPagination();
+  // Derive pagination from store for current session - use shallow compare to prevent re-render
+  const storePagination = useSessionStore(
+    useShallow(state => {
+      const viewingId = state.viewingSessionId;
+      if (!viewingId || !state.sessionData[viewingId]) {
+        return DEFAULT_PAGINATION;
+      }
+      return state.sessionData[viewingId].pagination || DEFAULT_PAGINATION;
+    })
+  );
   const messagesOffset = storePagination.offset;
   const hasMoreMessages = storePagination.hasMore;
   const totalMessages = storePagination.total;
@@ -1848,6 +1854,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const inputContainerRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const isLoadingSessionRef = useRef(false); // Track session loading to prevent multiple scrolls
+  const lastLoadedSessionRef = useRef(null); // Track last loaded session to prevent duplicate loads
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
@@ -2331,10 +2338,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       if (loadMore) {
         // Prepend older messages to existing ones in store
-        prependSessionMessages(sessionId, messages, pagination);
+        useSessionStore.getState().prependSessionMessages(sessionId, messages, pagination);
       } else {
         // Set messages in store (initial load)
-        storeSetSessionMessages(sessionId, messages, pagination);
+        useSessionStore.getState().setSessionMessages(sessionId, messages, pagination);
       }
 
       return messages;
@@ -2352,7 +2359,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setIsLoadingMoreMessages(false);
       }
     }
-  }, [onSessionLoaded, storeSetSessionMessages, prependSessionMessages]);
+  }, [onSessionLoaded]);
 
   // Load Cursor session messages from SQLite via backend
   const loadCursorSessionMessages = useCallback(async (projectPath, sessionId) => {
@@ -2881,8 +2888,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const moreMessages = await loadSessionMessages(selectedProject.name, selectedSession.id, true);
 
         if (moreMessages.length > 0) {
-          // Update local sessionMessages from store
-          const updatedMessages = getCurrentSessionMessages();
+          // Update local sessionMessages from store (use getState to avoid dependency)
+          const updatedMessages = useSessionStore.getState().getCurrentSessionMessages();
           setSessionMessages(updatedMessages);
 
           // Restore scroll position after DOM update
@@ -2896,13 +2903,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-  }, [isAtBottom, hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages, getCurrentSessionMessages]);
+  }, [isAtBottom, hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
 
   useEffect(() => {
     // Load session messages when session changes
     // Now uses Session Store for caching - instant switch if already cached
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
+        // Skip if already loaded this session (prevent infinite loop)
+        if (lastLoadedSessionRef.current === selectedSession.id) {
+          return;
+        }
+        lastLoadedSessionRef.current = selectedSession.id;
+
         const provider = localStorage.getItem('selected-provider') || 'claude';
 
         // Mark that we're loading a session to prevent multiple scroll triggers
@@ -2940,15 +2953,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         } else {
           // For Claude, use Session Store for caching
           setCurrentSessionId(selectedSession.id);
-          switchSession(selectedSession.id);
+          useSessionStore.getState().switchSession(selectedSession.id);
 
           // Only load messages from API if this is a user-initiated session change
           // For system-initiated changes, preserve existing messages and rely on WebSocket
           if (!isSystemSessionChange) {
             // Check if session is already cached in store
-            if (isSessionCached(selectedSession.id)) {
+            if (useSessionStore.getState().isSessionCached(selectedSession.id)) {
               // Session is cached - use messages from store (instant switch)
-              const cachedMessages = getCurrentSessionMessages();
+              const cachedMessages = useSessionStore.getState().getCurrentSessionMessages();
               setSessionMessages(cachedMessages);
               console.log(`📦 Session ${selectedSession.id.slice(0, 8)} loaded from cache (${cachedMessages.length} messages)`);
             } else {
@@ -2972,7 +2985,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setSessionMessages([]);
         }
         setCurrentSessionId(null);
-        switchSession(null);
+        useSessionStore.getState().switchSession(null);
         sessionStorage.removeItem('cursorSessionId');
       }
 
@@ -2984,7 +2997,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     loadMessages();
-  }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange, switchSession, isSessionCached, getCurrentSessionMessages]);
+  }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
 
   // Check session status when switching sessions - separate effect to ensure ws/sendMessage are ready
   useEffect(() => {
