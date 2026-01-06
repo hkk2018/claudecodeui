@@ -2997,17 +2997,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     loadMessages();
   }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
 
-  // Check session status when switching sessions - separate effect to ensure ws/sendMessage are ready
+  // Check session status when switching sessions
+  // Uses ref to prevent re-execution when sendMessage reference changes
+  const lastCheckedSessionRef = useRef(null);
   useEffect(() => {
-    if (selectedSession && ws && sendMessage) {
+    // Only check status once per session
+    if (selectedSession && sendMessage && lastCheckedSessionRef.current !== selectedSession.id) {
+      lastCheckedSessionRef.current = selectedSession.id;
       const provider = localStorage.getItem('selected-provider') || 'claude';
+      console.log('📡 Sending check-session-status for:', selectedSession.id.slice(0, 8));
       sendMessage({
         type: 'check-session-status',
         sessionId: selectedSession.id,
         provider
       });
     }
-  }, [selectedSession?.id, ws, sendMessage]);
+  }, [selectedSession?.id, sendMessage]);
 
   // External Message Update Handler: Reload messages when external CLI modifies current session
   // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
@@ -3156,6 +3161,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // If no pendingSessionId yet, accept the message (it's the first message from our new session)
         }
       }
+
+      // Debug: log all message types
+      console.log('📨 WS message type:', latestMessage.type, latestMessage.sessionId ? `session: ${latestMessage.sessionId.slice(0,8)}` : '');
 
       switch (latestMessage.type) {
         case 'session-created':
@@ -3584,6 +3592,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         case 'claude-complete':
           // Get session ID from message or fall back to current session
           const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
+          console.log('🏁 claude-complete received:', { completedSessionId, currentSessionId, match: completedSessionId === currentSessionId });
 
           // Update UI state if this is the current session OR if we don't have a session ID yet (new session)
           if (completedSessionId === currentSessionId || !currentSessionId) {

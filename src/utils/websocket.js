@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
@@ -82,13 +82,21 @@ export function useWebSocket() {
     }
   };
 
-  const sendMessage = (message) => {
-    if (ws && isConnected) {
-      ws.send(JSON.stringify(message));
+  // Stable reference to ws for sendMessage callback
+  const wsRef = useRef(null);
+  wsRef.current = ws;
+
+  const isConnectedRef = useRef(false);
+  isConnectedRef.current = isConnected;
+
+  // Use useCallback with refs to maintain stable function reference
+  const sendMessage = useCallback((message) => {
+    if (wsRef.current && isConnectedRef.current) {
+      wsRef.current.send(JSON.stringify(message));
     } else {
       console.warn('WebSocket not connected');
     }
-  };
+  }, []); // Empty deps - uses refs for latest values
 
   return {
     ws,
