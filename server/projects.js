@@ -65,6 +65,10 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -260,100 +264,76 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
   return projectPath;
 }
 
+// Helper: read first line of a file using head command (O(1) regardless of file size)
+// Using first line because session starts at the user's intended project directory,
+// while later lines may have cwd pointing to temp directories during Claude's work
+async function readFirstLine(filePath) {
+  try {
+    const { stdout } = await execFileAsync('head', ['-1', filePath], { timeout: 5000 });
+    return stdout.trim();
+  } catch (error) {
+    return null;
+  }
+}
+
 // Extract the actual project directory from JSONL sessions (with caching)
+// Optimized: only reads the first line of the most recent session file
 async function extractProjectDirectory(projectName) {
   // Check cache first
   if (projectDirectoryCache.has(projectName)) {
     return projectDirectoryCache.get(projectName);
   }
-  
-  
+
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  const cwdCounts = new Map();
-  let latestTimestamp = 0;
-  let latestCwd = null;
   let extractedPath;
-  
+
   try {
     // Check if the project directory exists
     await fs.access(projectDir);
-    
+
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    
+
     if (jsonlFiles.length === 0) {
       // Fall back to decoded project name if no sessions
       extractedPath = projectName.replace(/-/g, '/');
     } else {
-      // Process all JSONL files to collect cwd values
-      for (const file of jsonlFiles) {
-        const jsonlFile = path.join(projectDir, file);
-        const fileStream = fsSync.createReadStream(jsonlFile);
-        const rl = readline.createInterface({
-          input: fileStream,
-          crlfDelay: Infinity
-        });
-        
-        for await (const line of rl) {
-          if (line.trim()) {
-            try {
-              const entry = JSON.parse(line);
-              
-              if (entry.cwd) {
-                // Count occurrences of each cwd
-                cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
-                
-                // Track the most recent cwd
-                const timestamp = new Date(entry.timestamp || 0).getTime();
-                if (timestamp > latestTimestamp) {
-                  latestTimestamp = timestamp;
-                  latestCwd = entry.cwd;
-                }
-              }
-            } catch (parseError) {
-              // Skip malformed lines
+      // Get file stats to find the most recently modified file
+      const fileStats = await Promise.all(
+        jsonlFiles.map(async (file) => {
+          const filePath = path.join(projectDir, file);
+          const stat = await fs.stat(filePath);
+          return { file, filePath, mtime: stat.mtimeMs };
+        })
+      );
+
+      // Sort by modification time (newest first)
+      fileStats.sort((a, b) => b.mtime - a.mtime);
+
+      // Try to get cwd from the most recent files (up to 3)
+      let cwd = null;
+      for (let i = 0; i < Math.min(3, fileStats.length) && !cwd; i++) {
+        const firstLine = await readFirstLine(fileStats[i].filePath);
+        if (firstLine) {
+          try {
+            const entry = JSON.parse(firstLine);
+            if (entry.cwd) {
+              cwd = entry.cwd;
             }
+          } catch (parseError) {
+            // Skip malformed lines, try next file
           }
         }
       }
-      
-      // Determine the best cwd to use
-      if (cwdCounts.size === 0) {
-        // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
-      } else if (cwdCounts.size === 1) {
-        // Only one cwd, use it
-        extractedPath = Array.from(cwdCounts.keys())[0];
-      } else {
-        // Multiple cwd values - prefer the most recent one if it has reasonable usage
-        const mostRecentCount = cwdCounts.get(latestCwd) || 0;
-        const maxCount = Math.max(...cwdCounts.values());
-        
-        // Use most recent if it has at least 25% of the max count
-        if (mostRecentCount >= maxCount * 0.25) {
-          extractedPath = latestCwd;
-        } else {
-          // Otherwise use the most frequently used cwd
-          for (const [cwd, count] of cwdCounts.entries()) {
-            if (count === maxCount) {
-              extractedPath = cwd;
-              break;
-            }
-          }
-        }
-        
-        // Fallback (shouldn't reach here)
-        if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
-        }
-      }
+
+      extractedPath = cwd || projectName.replace(/-/g, '/');
     }
-    
+
     // Cache the result
     projectDirectoryCache.set(projectName, extractedPath);
-    
+
     return extractedPath;
-    
+
   } catch (error) {
     // If the directory doesn't exist, just use the decoded project name
     if (error.code === 'ENOENT') {
@@ -363,20 +343,23 @@ async function extractProjectDirectory(projectName) {
       // Fall back to decoded project name for other errors
       extractedPath = projectName.replace(/-/g, '/');
     }
-    
+
     // Cache the fallback result too
     projectDirectoryCache.set(projectName, extractedPath);
-    
+
     return extractedPath;
   }
 }
 
 async function getProjects() {
+  const startTime = performance.now();
+  console.log('[PERF] 🚀 getProjects() started');
+
   const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
-  
+
   try {
     // Check if the .claude/projects directory exists
     await fs.access(claudeDir);
@@ -384,19 +367,26 @@ async function getProjects() {
     // First, get existing Claude projects from the file system
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
     
-    for (const entry of entries) {
+    let totalExtract = 0, totalDisplay = 0, totalSessions = 0, totalCursor = 0, totalTask = 0;
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
       if (entry.isDirectory()) {
         existingProjects.add(entry.name);
         const projectPath = path.join(claudeDir, entry.name);
-        
+
         // Extract actual project directory from JSONL sessions
+        let t0 = performance.now();
         const actualProjectDir = await extractProjectDirectory(entry.name);
-        
+        totalExtract += performance.now() - t0;
+
         // Get display name from config or generate one
+        t0 = performance.now();
         const customName = config[entry.name]?.displayName;
         const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+        totalDisplay += performance.now() - t0;
         const fullPath = actualProjectDir;
-        
+
         const project = {
           name: entry.name,
           path: actualProjectDir,
@@ -405,10 +395,12 @@ async function getProjects() {
           isCustomName: !!customName,
           sessions: []
         };
-        
+
         // Try to get sessions for this project (just first 5 for performance)
         try {
+          t0 = performance.now();
           const sessionResult = await getSessions(entry.name, 5, 0);
+          totalSessions += performance.now() - t0;
           project.sessions = sessionResult.sessions || [];
           project.sessionMeta = {
             hasMore: sessionResult.hasMore,
@@ -417,18 +409,22 @@ async function getProjects() {
         } catch (e) {
           console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
         }
-        
+
         // Also fetch Cursor sessions for this project
         try {
+          t0 = performance.now();
           project.cursorSessions = await getCursorSessions(actualProjectDir);
+          totalCursor += performance.now() - t0;
         } catch (e) {
           console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
           project.cursorSessions = [];
         }
-        
+
         // Add TaskMaster detection
         try {
+          t0 = performance.now();
           const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
+          totalTask += performance.now() - t0;
           project.taskmaster = {
             hasTaskmaster: taskMasterResult.hasTaskmaster,
             hasEssentialFiles: taskMasterResult.hasEssentialFiles,
@@ -444,10 +440,17 @@ async function getProjects() {
             status: 'error'
           };
         }
-        
+
         projects.push(project);
+
+        // Progress log every 5 projects
+        if ((i + 1) % 5 === 0) {
+          console.log(`[PERF] 🔄 Processed ${i + 1}/${entries.length} projects`);
+        }
       }
     }
+
+    console.log(`[PERF] ⏱️ Breakdown: extract=${totalExtract.toFixed(0)}ms, display=${totalDisplay.toFixed(0)}ms, sessions=${totalSessions.toFixed(0)}ms, cursor=${totalCursor.toFixed(0)}ms, task=${totalTask.toFixed(0)}ms`);
   } catch (error) {
     // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
     if (error.code !== 'ENOENT') {
@@ -517,7 +520,8 @@ async function getProjects() {
       projects.push(project);
     }
   }
-  
+
+  console.log(`[PERF] ✅ getProjects() completed in ${(performance.now() - startTime).toFixed(0)}ms with ${projects.length} projects`);
   return projects;
 }
 

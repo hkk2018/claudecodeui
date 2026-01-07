@@ -123,6 +123,8 @@ function AppContent() {
 
   useEffect(() => {
     // Fetch projects on component mount
+    console.log('[INIT] 🚀 App mounted, starting fetchProjects...');
+    console.time('[INIT] fetchProjects total');
     fetchProjects();
   }, []);
 
@@ -179,13 +181,21 @@ function AppContent() {
   }, [messages, selectedProject, selectedSession]);
 
   const fetchProjects = async () => {
+    const initStart = performance.now();
     try {
       setIsLoadingProjects(true);
+      console.log('[INIT] 📡 Fetching projects from API...');
+      console.time('[INIT] api.projects()');
       const response = await api.projects();
       const data = await response.json();
-      
+      console.timeEnd('[INIT] api.projects()');
+      console.log(`[INIT] ✅ Got ${data.length} projects`);
+
       // Always fetch Cursor sessions for each project so we can combine views
-      for (let project of data) {
+      console.log('[INIT] 🔄 Fetching Cursor sessions for each project...');
+      console.time('[INIT] Cursor sessions total');
+      for (let i = 0; i < data.length; i++) {
+        const project = data[i];
         try {
           const url = `/api/cursor/sessions?projectPath=${encodeURIComponent(project.fullPath || project.path)}`;
           const cursorResponse = await authenticatedFetch(url);
@@ -203,7 +213,12 @@ function AppContent() {
           console.error(`Error fetching Cursor sessions for project ${project.name}:`, error);
           project.cursorSessions = [];
         }
+        // Log progress every 5 projects
+        if ((i + 1) % 5 === 0 || i === data.length - 1) {
+          console.log(`[INIT] 🔄 Cursor sessions: ${i + 1}/${data.length} projects processed`);
+        }
       }
+      console.timeEnd('[INIT] Cursor sessions total');
       
       // Optimize to preserve object references when data hasn't changed
       setProjects(prevProjects => {
@@ -231,10 +246,12 @@ function AppContent() {
         // Only update if there are actual changes
         return hasChanges ? data : prevProjects;
       });
-      
+
       // Don't auto-select any project - user should choose manually
+      console.log(`[INIT] ✅ Projects loaded in ${(performance.now() - initStart).toFixed(0)}ms`);
+      console.timeEnd('[INIT] fetchProjects total');
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('[INIT] ❌ Error fetching projects:', error);
     } finally {
       setIsLoadingProjects(false);
     }
