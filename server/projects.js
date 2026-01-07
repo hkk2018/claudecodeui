@@ -525,6 +525,94 @@ async function getProjects() {
   return projects;
 }
 
+// Lightweight version of getProjects - returns only basic info without sessions
+// Used for fast initial load, sessions are loaded progressively by frontend
+async function getProjectsBasic() {
+  const startTime = performance.now();
+  console.log('[PERF] 🚀 getProjectsBasic() started');
+
+  const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
+  const config = await loadProjectConfig();
+  const projects = [];
+  const existingProjects = new Set();
+
+  try {
+    await fs.access(claudeDir);
+    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
+
+    // Get stats for all directories in parallel for sorting by lastModified
+    const projectPromises = entries
+      .filter(entry => entry.isDirectory())
+      .map(async (entry) => {
+        existingProjects.add(entry.name);
+        const projectPath = path.join(claudeDir, entry.name);
+
+        // These are fast operations (already optimized)
+        const [actualProjectDir, stat] = await Promise.all([
+          extractProjectDirectory(entry.name),
+          fs.stat(projectPath)
+        ]);
+
+        const customName = config[entry.name]?.displayName;
+        const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+
+        return {
+          name: entry.name,
+          path: actualProjectDir,
+          displayName: customName || autoDisplayName,
+          fullPath: actualProjectDir,
+          isCustomName: !!customName,
+          lastModified: stat.mtimeMs,
+          // Sessions will be loaded separately by frontend
+          sessions: [],
+          cursorSessions: [],
+          sessionsLoaded: false
+        };
+      });
+
+    const resolvedProjects = await Promise.all(projectPromises);
+    projects.push(...resolvedProjects);
+
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('Error reading projects directory:', error);
+    }
+  }
+
+  // Add manually configured projects
+  for (const [projectName, projectConfig] of Object.entries(config)) {
+    if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
+      let actualProjectDir = projectConfig.originalPath;
+      if (!actualProjectDir) {
+        try {
+          actualProjectDir = await extractProjectDirectory(projectName);
+        } catch (error) {
+          actualProjectDir = projectName.replace(/-/g, '/');
+        }
+      }
+
+      projects.push({
+        name: projectName,
+        path: actualProjectDir,
+        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+        fullPath: actualProjectDir,
+        isCustomName: !!projectConfig.displayName,
+        isManuallyAdded: true,
+        lastModified: 0, // Manual projects go to the end
+        sessions: [],
+        cursorSessions: [],
+        sessionsLoaded: false
+      });
+    }
+  }
+
+  // Sort by lastModified (newest first)
+  projects.sort((a, b) => b.lastModified - a.lastModified);
+
+  console.log(`[PERF] ✅ getProjectsBasic() completed in ${(performance.now() - startTime).toFixed(0)}ms with ${projects.length} projects`);
+  return projects;
+}
+
 async function getSessions(projectName, limit = 5, offset = 0) {
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
 
@@ -1179,6 +1267,7 @@ async function getCursorSessions(projectPath) {
 
 export {
   getProjects,
+  getProjectsBasic,
   getSessions,
   getSessionMessages,
   parseJsonlSessions,

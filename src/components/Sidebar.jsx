@@ -148,17 +148,23 @@ function Sidebar({
   }, [selectedSession, selectedProject]);
 
   // Mark sessions as loaded when projects come in
+  // Now uses sessionsLoaded flag from progressive loading
   useEffect(() => {
-    if (projects.length > 0 && !isLoading) {
+    if (projects.length > 0) {
       const newLoaded = new Set();
       projects.forEach(project => {
-        if (project.sessions && project.sessions.length >= 0) {
+        // Use sessionsLoaded flag if available, otherwise check if sessions exist
+        if (project.sessionsLoaded || (project.sessions && project.sessions.length > 0)) {
           newLoaded.add(project.name);
         }
       });
-      setInitialSessionsLoaded(newLoaded);
+      setInitialSessionsLoaded(prev => {
+        // Only update if there are new loaded projects
+        const hasNew = [...newLoaded].some(name => !prev.has(name));
+        return hasNew ? new Set([...prev, ...newLoaded]) : prev;
+      });
     }
-  }, [projects, isLoading]);
+  }, [projects]);
 
   // Load project sort order from settings
   useEffect(() => {
