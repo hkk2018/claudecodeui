@@ -2973,6 +2973,56 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     touchStartY.current = null;
   }, [pullToRefreshState, selectedSession, selectedProject, loadSessionMessages, clearSessionCache]);
 
+  // Wheel-based pull-to-refresh for desktop (scroll past bottom to trigger)
+  const wheelAccumulator = useRef(0);
+  const wheelResetTimer = useRef(null);
+
+  const handleWheel = useCallback((e) => {
+    if (!isAtBottomRef.current || pullToRefreshState === 'refreshing') return;
+
+    // Only trigger on scroll down (positive deltaY) when at bottom
+    if (e.deltaY > 0) {
+      wheelAccumulator.current += e.deltaY;
+
+      // Reset accumulator after 500ms of no scrolling
+      clearTimeout(wheelResetTimer.current);
+      wheelResetTimer.current = setTimeout(() => {
+        wheelAccumulator.current = 0;
+        if (pullToRefreshState !== 'refreshing') {
+          setPullToRefreshState('idle');
+          setPullDistance(0);
+        }
+      }, 500);
+
+      // Update UI based on accumulated scroll
+      const distance = Math.min(wheelAccumulator.current * 0.3, PULL_THRESHOLD * 1.5);
+      setPullDistance(distance);
+      setPullToRefreshState(distance >= PULL_THRESHOLD ? 'ready' : 'pulling');
+
+      // Trigger refresh when threshold reached
+      if (wheelAccumulator.current >= PULL_THRESHOLD * 2 && pullToRefreshState !== 'refreshing') {
+        wheelAccumulator.current = 0;
+        setPullToRefreshState('refreshing');
+        setPullDistance(0);
+
+        const provider = localStorage.getItem('selected-provider') || 'claude';
+        if (provider !== 'cursor' && selectedSession && selectedProject) {
+          clearSessionCache(selectedSession.id);
+          loadSessionMessages(selectedProject.name, selectedSession.id, false)
+            .then(messages => {
+              setSessionMessages(messages);
+            })
+            .catch(err => console.error('Failed to refresh:', err))
+            .finally(() => {
+              setPullToRefreshState('idle');
+            });
+        } else {
+          setPullToRefreshState('idle');
+        }
+      }
+    }
+  }, [pullToRefreshState, selectedSession, selectedProject, loadSessionMessages, clearSessionCache]);
+
   useEffect(() => {
     // Load session messages when session changes
     // Now uses Session Store for caching - instant switch if already cached
@@ -4565,6 +4615,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
       >
         {/* Show loading indicator at top if loading AND already have messages */}
         {isLoadingSessionMessages && chatMessages.length > 0 && (
