@@ -24,6 +24,7 @@ import {
   switchToSession,
   setSessionMessages as storeSetMessages,
   prependSessionMessages as storePrependMessages,
+  clearSession as clearSessionCache,
 } from '../stores/sessionSignals';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1870,6 +1871,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  // Pull-to-refresh at bottom state
+  const [pullToRefreshState, setPullToRefreshState] = useState('idle'); // 'idle' | 'pulling' | 'ready' | 'refreshing'
+  const [pullDistance, setPullDistance] = useState(0);
+  const touchStartY = useRef(null);
+  const isAtBottomRef = useRef(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
@@ -2876,6 +2882,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const atBottom = isAtBottom();
       // Only allow auto-scroll if user is at the very bottom (within 5px)
       setIsUserScrolledUp(!atBottom);
+      // Track if at bottom for pull-to-refresh
+      isAtBottomRef.current = atBottom;
 
       // Check if we should load more messages (scrolled near top)
       const scrolledNearTop = container.scrollTop < 100;
@@ -2906,6 +2914,64 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
   }, [isAtBottom, hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
+
+  // Pull-to-refresh handlers for reloading messages at bottom
+  const PULL_THRESHOLD = 80; // pixels to pull before triggering refresh
+
+  const handleTouchStart = useCallback((e) => {
+    if (isAtBottomRef.current && pullToRefreshState === 'idle') {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  }, [pullToRefreshState]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (touchStartY.current === null || pullToRefreshState === 'refreshing') return;
+    if (!isAtBottomRef.current) {
+      touchStartY.current = null;
+      setPullDistance(0);
+      setPullToRefreshState('idle');
+      return;
+    }
+
+    const currentY = e.touches[0].clientY;
+    const diff = touchStartY.current - currentY; // Positive when pulling up (past bottom)
+
+    if (diff > 0) {
+      // Pulling up past bottom
+      const distance = Math.min(diff * 0.5, PULL_THRESHOLD * 1.5); // Resistance effect
+      setPullDistance(distance);
+      setPullToRefreshState(distance >= PULL_THRESHOLD ? 'ready' : 'pulling');
+    } else {
+      setPullDistance(0);
+      setPullToRefreshState('idle');
+    }
+  }, [pullToRefreshState]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullToRefreshState === 'ready' && selectedSession && selectedProject) {
+      setPullToRefreshState('refreshing');
+      setPullDistance(0);
+
+      try {
+        // Clear cache and reload messages
+        const provider = localStorage.getItem('selected-provider') || 'claude';
+        if (provider !== 'cursor') {
+          // Force reload by clearing cache first
+          clearSessionCache(selectedSession.id);
+          const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
+          setSessionMessages(messages);
+        }
+      } catch (error) {
+        console.error('Failed to refresh messages:', error);
+      } finally {
+        setPullToRefreshState('idle');
+      }
+    } else {
+      setPullDistance(0);
+      setPullToRefreshState('idle');
+    }
+    touchStartY.current = null;
+  }, [pullToRefreshState, selectedSession, selectedProject, loadSessionMessages, clearSessionCache]);
 
   useEffect(() => {
     // Load session messages when session changes
@@ -4496,6 +4562,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {/* Show loading indicator at top if loading AND already have messages */}
         {isLoadingSessionMessages && chatMessages.length > 0 && (
@@ -4738,6 +4807,49 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         )}
         
         <div ref={messagesEndRef} />
+
+        {/* Pull-to-refresh indicator at bottom */}
+        {pullToRefreshState !== 'idle' && (
+          <div
+            className="sticky bottom-0 left-0 right-0 flex justify-center py-3 transition-all duration-200"
+            style={{
+              opacity: pullDistance > 20 ? 1 : pullDistance / 20,
+              transform: `translateY(${Math.min(pullDistance, 60)}px)`
+            }}
+          >
+            <div className={`
+              flex items-center gap-2 px-4 py-2 rounded-full
+              ${pullToRefreshState === 'refreshing'
+                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                : pullToRefreshState === 'ready'
+                  ? 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+              }
+              text-sm font-medium shadow-lg
+            `}>
+              {pullToRefreshState === 'refreshing' ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent" />
+                  <span>Refreshing...</span>
+                </>
+              ) : pullToRefreshState === 'ready' ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Release to refresh</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                  <span>Pull up to refresh</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
 
