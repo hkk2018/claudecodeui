@@ -276,6 +276,103 @@ async function readFirstLine(filePath) {
   }
 }
 
+// Cache for validated path segments to avoid redundant filesystem checks
+// Key: partial path (e.g., "/home/ubuntu/Projects"), Value: true (exists)
+const pathSegmentCache = new Map();
+
+// Decode project name by incrementally verifying path segments exist on filesystem
+// This handles directory names with hyphens (e.g., "my-console", "hpc-frontend-worktree") correctly
+//
+// Algorithm:
+// 1. Build validated prefix path one segment at a time (e.g., /home/ubuntu/Projects/ken)
+// 2. For remaining parts, try different dash positions to find valid directory names:
+//    - Try first dash: "hpc" ✗
+//    - Try second dash: "hpc-frontend" ✗
+//    - Try third dash: "hpc-frontend-worktree" ✓ Found!
+// 3. Recursively process remaining parts the same way
+// 4. Use cache to skip redundant filesystem checks for validated parent paths
+//
+// Example: "-home-ubuntu-Projects-ken-hpc-frontend-worktree-svc-portal"
+//   Step 1: Build prefix
+//     /home ✓ → /home/ubuntu ✓ → /home/ubuntu/Projects ✓ → /home/ubuntu/Projects/ken ✓
+//     Remaining: ["hpc", "frontend", "worktree", "svc", "portal"]
+//
+//   Step 2: Try different combinations for next segment
+//     /home/ubuntu/Projects/ken/hpc ✗
+//     /home/ubuntu/Projects/ken/hpc-frontend ✗
+//     /home/ubuntu/Projects/ken/hpc-frontend-worktree ✓ Found!
+//     Remaining: ["svc", "portal"]
+//
+//   Step 3: Recursively process remaining
+//     /home/ubuntu/Projects/ken/hpc-frontend-worktree/svc ✗
+//     /home/ubuntu/Projects/ken/hpc-frontend-worktree/svc-portal ✓ Found!
+//
+//   Result: /home/ubuntu/Projects/ken/hpc-frontend-worktree/svc-portal
+async function decodeProjectName(projectName) {
+  // Remove leading '-' and split by '-'
+  const parts = projectName.startsWith('-')
+    ? projectName.slice(1).split('-')
+    : projectName.split('-');
+
+  return await decodePathRecursive('', parts, 0);
+}
+
+// Recursive helper to decode path by trying different dash combinations
+// basePath: the validated path so far (e.g., "/home/ubuntu/Projects/ken")
+// parts: remaining parts to process (e.g., ["hpc", "frontend", "worktree", "svc", "portal"])
+// startIndex: where to start in the parts array
+async function decodePathRecursive(basePath, parts, startIndex) {
+  // Base case: no more parts to process
+  if (startIndex >= parts.length) {
+    return basePath;
+  }
+
+  // Try combining parts with increasing number of dashes
+  // Prefer longer matches (greedy from right to left)
+  // e.g., try "hpc-frontend-worktree-svc-portal" first, then "hpc-frontend-worktree-svc", etc.
+  let lastValidPath = null;
+  let lastValidEndIndex = -1;
+
+  for (let endIndex = startIndex; endIndex < parts.length; endIndex++) {
+    const segment = parts.slice(startIndex, endIndex + 1).join('-');
+    const candidatePath = basePath + '/' + segment;
+
+    // Check cache first
+    if (pathSegmentCache.has(candidatePath)) {
+      lastValidPath = candidatePath;
+      lastValidEndIndex = endIndex;
+      continue;
+    }
+
+    // Try accessing the path
+    try {
+      await fs.access(candidatePath);
+      pathSegmentCache.set(candidatePath, true);
+
+      // Found a valid path, but keep trying longer combinations
+      lastValidPath = candidatePath;
+      lastValidEndIndex = endIndex;
+    } catch (error) {
+      // Path doesn't exist, continue trying longer combinations
+      continue;
+    }
+  }
+
+  // If we found at least one valid path, use the longest one
+  if (lastValidPath) {
+    return await decodePathRecursive(lastValidPath, parts, lastValidEndIndex + 1);
+  }
+
+  // No valid path found with any combination
+  // Return the basePath we have so far, or construct fallback path
+  if (basePath) {
+    return basePath;
+  }
+
+  // Last resort: simple join (should rarely happen)
+  return '/' + parts.join('/');
+}
+
 // Extract the actual project directory from JSONL sessions (with caching)
 // Optimized: only reads the first line of the most recent session file
 async function extractProjectDirectory(projectName) {
@@ -295,8 +392,8 @@ async function extractProjectDirectory(projectName) {
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
 
     if (jsonlFiles.length === 0) {
-      // Fall back to decoded project name if no sessions
-      extractedPath = projectName.replace(/-/g, '/');
+      // Fall back to intelligent path decoding if no sessions
+      extractedPath = await decodeProjectName(projectName);
     } else {
       // Get file stats to find the most recently modified file
       const fileStats = await Promise.all(
@@ -326,7 +423,7 @@ async function extractProjectDirectory(projectName) {
         }
       }
 
-      extractedPath = cwd || projectName.replace(/-/g, '/');
+      extractedPath = cwd || await decodeProjectName(projectName);
     }
 
     // Cache the result
@@ -335,13 +432,13 @@ async function extractProjectDirectory(projectName) {
     return extractedPath;
 
   } catch (error) {
-    // If the directory doesn't exist, just use the decoded project name
+    // If the directory doesn't exist, use intelligent path decoding
     if (error.code === 'ENOENT') {
-      extractedPath = projectName.replace(/-/g, '/');
+      extractedPath = await decodeProjectName(projectName);
     } else {
       console.error(`Error extracting project directory for ${projectName}:`, error);
-      // Fall back to decoded project name for other errors
-      extractedPath = projectName.replace(/-/g, '/');
+      // Fall back to intelligent path decoding for other errors
+      extractedPath = await decodeProjectName(projectName);
     }
 
     // Cache the fallback result too
