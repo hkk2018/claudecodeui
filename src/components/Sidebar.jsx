@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, LayoutList } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, LayoutList, Bug } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
@@ -54,6 +54,7 @@ function Sidebar({
   isLoading,
   onRefresh,
   onShowSettings,
+  onShowDebug,
   updateAvailable,
   latestVersion,
   currentVersion,
@@ -1414,10 +1415,19 @@ function Sidebar({
         </div>
       )}
 
-      {/* Settings Section */}
+      {/* Settings & Debug Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0 mb-2">
         {/* Mobile Settings - smaller size matching tablet */}
-        <div className="md:hidden p-3 pb-16 border-t border-border/50">
+        <div className="md:hidden p-3 pb-16 border-t border-border/50 space-y-2">
+          <button
+            className="w-full h-11 bg-muted/50 hover:bg-muted/70 rounded-xl flex items-center justify-start gap-3 px-3 active:scale-[0.98] transition-all duration-150"
+            onClick={onShowDebug}
+          >
+            <div className="w-8 h-8 rounded-xl bg-background/80 flex items-center justify-center">
+              <Bug className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <span className="text-base font-medium text-foreground">Debug Monitor</span>
+          </button>
           <button
             className="w-full h-11 bg-muted/50 hover:bg-muted/70 rounded-xl flex items-center justify-start gap-3 px-3 active:scale-[0.98] transition-all duration-150"
             onClick={onShowSettings}
@@ -1430,6 +1440,14 @@ function Sidebar({
         </div>
 
         {/* Desktop Settings */}
+        <Button
+          variant="ghost"
+          className="hidden md:flex w-full justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
+          onClick={onShowDebug}
+        >
+          <Bug className="w-3 h-3" />
+          <span className="text-xs">Debug Monitor</span>
+        </Button>
         <Button
           variant="ghost"
           className="hidden md:flex w-full justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"

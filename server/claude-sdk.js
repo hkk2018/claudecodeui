@@ -681,6 +681,86 @@ function getSessionInfo(sessionId) {
   };
 }
 
+/**
+ * Gets detailed status of all active sessions
+ * Useful for debugging stuck sessions
+ * @returns {Array<Object>} Array of session status objects
+ */
+function getAllSessionsStatus() {
+  const now = Date.now();
+  const sessions = [];
+
+  for (const [sessionId, session] of activeSessions.entries()) {
+    const runningTime = now - session.startTime;
+    sessions.push({
+      sessionId,
+      status: session.status,
+      startTime: session.startTime,
+      runningTimeMs: runningTime,
+      runningTimeFormatted: formatDuration(runningTime),
+      hasTempFiles: session.tempImagePaths?.length > 0
+    });
+  }
+
+  return sessions;
+}
+
+/**
+ * Gets all pending permission requests
+ * @returns {Array<Object>} Array of pending permission request objects
+ */
+function getAllPendingPermissions() {
+  const now = Date.now();
+  const permissions = [];
+
+  for (const [requestId, request] of pendingPermissionRequests.entries()) {
+    const waitingTime = now - request.timestamp;
+    permissions.push({
+      requestId,
+      toolName: request.toolName,
+      toolUseID: request.toolUseID,
+      timestamp: request.timestamp,
+      waitingTimeMs: waitingTime,
+      waitingTimeFormatted: formatDuration(waitingTime),
+      input: request.input,
+      suggestions: request.suggestions
+    });
+  }
+
+  return permissions;
+}
+
+/**
+ * Formats duration in milliseconds to human-readable format
+ * @param {number} ms - Duration in milliseconds
+ * @returns {string} Formatted duration
+ */
+function formatDuration(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+/**
+ * Gets comprehensive debug information about sessions and permissions
+ * @returns {Object} Debug info object
+ */
+function getDebugInfo() {
+  return {
+    activeSessions: getAllSessionsStatus(),
+    pendingPermissions: getAllPendingPermissions(),
+    timestamp: Date.now()
+  };
+}
+
 // Export public API
 export {
   queryClaudeSDK,
@@ -689,5 +769,8 @@ export {
   getActiveClaudeSDKSessions,
   getSessionInfo,
   resolvePermissionRequest,
-  cleanupTimedOutPermissions
+  cleanupTimedOutPermissions,
+  getAllSessionsStatus,
+  getAllPendingPermissions,
+  getDebugInfo
 };

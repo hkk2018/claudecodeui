@@ -68,7 +68,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getProjectsBasic, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest, getAllSessionsStatus, getAllPendingPermissions, getDebugInfo } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -270,6 +270,37 @@ app.use('/api/user', authenticateToken, userRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
+
+// Debug API Routes (protected) - for monitoring sessions and permissions
+app.get('/api/debug/sessions', authenticateToken, (req, res) => {
+  try {
+    const sessions = getAllSessionsStatus();
+    res.json({ sessions });
+  } catch (error) {
+    console.error('Error getting session status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/debug/permissions', authenticateToken, (req, res) => {
+  try {
+    const permissions = getAllPendingPermissions();
+    res.json({ permissions });
+  } catch (error) {
+    console.error('Error getting pending permissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/debug/info', authenticateToken, (req, res) => {
+  try {
+    const debugInfo = getDebugInfo();
+    res.json(debugInfo);
+  } catch (error) {
+    console.error('Error getting debug info:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(__dirname, '../public')));

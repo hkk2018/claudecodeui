@@ -20,12 +20,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import { Settings as SettingsIcon, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Sparkles, Bug } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
+import DebugPanel from './components/DebugPanel';
 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -57,6 +58,7 @@ function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('tools');
   const [showQuickSettings, setShowQuickSettings] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
   const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
@@ -692,6 +694,7 @@ function AppContent() {
                 isLoading={isLoadingProjects}
                 onRefresh={handleSidebarRefresh}
                 onShowSettings={() => setShowSettings(true)}
+                onShowDebug={() => setShowDebugPanel(true)}
                 updateAvailable={updateAvailable}
                 latestVersion={latestVersion}
                 currentVersion={currentVersion}
@@ -719,6 +722,16 @@ function AppContent() {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                   </svg>
+                </button>
+
+                {/* Debug Icon */}
+                <button
+                  onClick={() => setShowDebugPanel(true)}
+                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200"
+                  aria-label="Debug Monitor"
+                  title="Debug Monitor"
+                >
+                  <Bug className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
                 </button>
 
                 {/* Settings Icon */}
@@ -786,6 +799,7 @@ function AppContent() {
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowSettings(true)}
+              onShowDebug={() => setShowDebugPanel(true)}
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
@@ -866,6 +880,12 @@ function AppContent() {
         initialTab={settingsInitialTab}
         showFloatingButton={showFloatingButton}
         setShowFloatingButton={setShowFloatingButton}
+      />
+
+      {/* Debug Panel */}
+      <DebugPanel
+        isOpen={showDebugPanel}
+        onClose={() => setShowDebugPanel(false)}
       />
 
       {/* Version Upgrade Modal */}
