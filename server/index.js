@@ -68,7 +68,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getProjectsBasic, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest, getAllSessionsStatus, getAllPendingPermissions, getDebugInfo } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest, getAllSessionsStatus, getAllPendingPermissions, getDebugInfo, addDebugMessage, getDebugMessages } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -298,6 +298,21 @@ app.get('/api/debug/info', authenticateToken, (req, res) => {
     res.json(debugInfo);
   } catch (error) {
     console.error('Error getting debug info:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/debug/messages', authenticateToken, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    const sessionId = req.query.sessionId;
+    const type = req.query.type;
+
+    const result = getDebugMessages({ limit, offset, sessionId, type });
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting debug messages:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -851,6 +866,23 @@ function handleChatConnection(ws) {
                 // Handle user's response to a permission request
                 console.log('[DEBUG] Permission response received:', data.requestId);
                 console.log('   Behavior:', data.behavior);
+
+                // Record user's permission response to debug log
+                addDebugMessage({
+                    id: `${data.requestId}_response`,
+                    sessionId: ws.sessionId || 'unknown',
+                    layer1: null, // No SDK layer for user responses
+                    layer2: {
+                        type: 'permission-response',
+                        requestId: data.requestId,
+                        behavior: data.behavior,
+                        message: data.message,
+                        updatedPermissions: data.updatedPermissions,
+                        interrupt: data.interrupt
+                    },
+                    source: 'user-permission-response',
+                    linkedRequestId: data.requestId
+                });
 
                 const success = resolvePermissionRequest(data.requestId, {
                     behavior: data.behavior,

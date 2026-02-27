@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, AlertCircle, Clock, Activity } from 'lucide-react';
+import { X, RefreshCw, AlertCircle, Clock, Activity, MessageSquare, ChevronDown, ChevronRight } from 'lucide-react';
 import { authenticatedFetch } from '../utils/api';
 
 function DebugPanel({ isOpen, onClose }) {
   const [debugInfo, setDebugInfo] = useState(null);
+  const [debugMessages, setDebugMessages] = useState({ messages: [], total: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [expandedMessages, setExpandedMessages] = useState(new Set());
 
   const fetchDebugInfo = async () => {
     setLoading(true);
@@ -26,16 +28,33 @@ function DebugPanel({ isOpen, onClose }) {
     }
   };
 
+  const fetchDebugMessages = async () => {
+    try {
+      const response = await authenticatedFetch('/api/debug/messages?limit=100');
+      if (!response.ok) {
+        throw new Error('Failed to fetch debug messages');
+      }
+      const data = await response.json();
+      setDebugMessages(data);
+    } catch (err) {
+      console.error('Error fetching debug messages:', err);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchDebugInfo();
+      fetchDebugMessages();
     }
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !autoRefresh) return;
 
-    const interval = setInterval(fetchDebugInfo, 2000); // Refresh every 2 seconds
+    const interval = setInterval(() => {
+      fetchDebugInfo();
+      fetchDebugMessages();
+    }, 2000); // Refresh every 2 seconds
     return () => clearInterval(interval);
   }, [isOpen, autoRefresh]);
 
@@ -59,6 +78,33 @@ function DebugPanel({ isOpen, onClose }) {
     if (runningTimeMs > 300000) return 'text-red-500'; // > 5 minutes
     if (runningTimeMs > 120000) return 'text-yellow-500'; // > 2 minutes
     return 'text-green-500';
+  };
+
+  const toggleMessageExpanded = (messageId) => {
+    setExpandedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  const getSourceBadgeColor = (source) => {
+    switch (source) {
+      case 'sdk-stream':
+        return 'bg-gray-500/10 text-gray-500';
+      case 'permission-request':
+        return 'bg-yellow-500/10 text-yellow-500';
+      case 'user-permission-response':
+        return 'bg-blue-500/10 text-blue-500';
+      case 'token-budget':
+        return 'bg-purple-500/10 text-purple-500';
+      default:
+        return 'bg-gray-500/10 text-gray-500';
+    }
   };
 
   return (
@@ -227,6 +273,98 @@ function DebugPanel({ isOpen, onClose }) {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No pending permission requests
+              </div>
+            )}
+          </section>
+
+          {/* Debug Messages */}
+          <section>
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <MessageSquare className="w-5 h-5" />
+              Debug Messages ({debugMessages.total})
+            </h3>
+            {debugMessages.messages?.length > 0 ? (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {debugMessages.messages.map((msg) => {
+                  const isExpanded = expandedMessages.has(msg.id);
+                  return (
+                    <div
+                      key={msg.id}
+                      className="bg-card border border-border rounded-lg p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSourceBadgeColor(msg.source)}`}>
+                              {msg.source}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(msg.timestamp).toLocaleTimeString()}
+                            </span>
+                            {msg.sessionId && (
+                              <span className="font-mono text-xs text-muted-foreground">
+                                session: {msg.sessionId.substring(0, 12)}...
+                              </span>
+                            )}
+                            {msg.linkedRequestId && (
+                              <span className="text-xs text-blue-500">
+                                → {msg.linkedRequestId}
+                              </span>
+                            )}
+                          </div>
+                          {msg.layer2?.toolName && (
+                            <div className="mt-1 text-sm font-semibold">
+                              Tool: {msg.layer2.toolName}
+                            </div>
+                          )}
+                          {msg.layer2?.behavior && (
+                            <div className={`mt-1 text-sm font-semibold ${
+                              msg.layer2.behavior === 'allow' ? 'text-green-500' : 'text-red-500'
+                            }`}>
+                              User {msg.layer2.behavior === 'allow' ? 'allowed' : 'denied'}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => toggleMessageExpanded(msg.id)}
+                          className="p-1 hover:bg-accent rounded transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <div className="space-y-2 pt-2 border-t border-border">
+                          {msg.layer1 && (
+                            <div>
+                              <p className="text-xs font-semibold text-muted-foreground mb-1">
+                                Layer 1 (SDK Raw):
+                              </p>
+                              <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-[200px] overflow-y-auto">
+                                {JSON.stringify(msg.layer1, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-1">
+                              Layer 2 (WebSocket):
+                            </p>
+                            <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-[200px] overflow-y-auto">
+                              {JSON.stringify(msg.layer2, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No debug messages yet
               </div>
             )}
           </section>

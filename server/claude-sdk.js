@@ -24,12 +24,60 @@ const activeSessions = new Map();
 // Each entry: { resolve, reject, toolName, input, suggestions }
 const pendingPermissionRequests = new Map();
 
+// Debug message log: Circular buffer for tracking SDK ↔ Server message flow
+// Each entry: { id, timestamp, sessionId, layer1, layer2, source }
+const debugMessageLog = [];
+const MAX_DEBUG_MESSAGES = 300;
+
 /**
  * Generates a unique ID for permission requests
  * @returns {string} Unique permission request ID
  */
 function generatePermissionRequestId() {
   return `perm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Adds a debug message to the circular buffer
+ * @param {Object} entry - Debug message entry
+ */
+function addDebugMessage(entry) {
+  debugMessageLog.push({
+    ...entry,
+    id: entry.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    timestamp: entry.timestamp || Date.now()
+  });
+
+  // Circular buffer: remove oldest when exceeding limit
+  if (debugMessageLog.length > MAX_DEBUG_MESSAGES) {
+    debugMessageLog.shift();
+  }
+}
+
+/**
+ * Gets debug messages with optional filtering
+ * @param {Object} options - Filter options { limit, offset, sessionId, type }
+ * @returns {Object} { messages, total }
+ */
+function getDebugMessages(options = {}) {
+  const { limit = 50, offset = 0, sessionId, type } = options;
+
+  let filtered = [...debugMessageLog];
+
+  if (sessionId) {
+    filtered = filtered.filter(msg => msg.sessionId === sessionId);
+  }
+
+  if (type) {
+    filtered = filtered.filter(msg => msg.source === type);
+  }
+
+  const total = filtered.length;
+  const messages = filtered
+    .slice(offset, offset + limit)
+    .reverse(); // Most recent first
+
+  return { messages, total };
 }
 
 /**
@@ -460,7 +508,7 @@ function createCanUseTool(ws) {
     });
 
     // Send permission request to frontend
-    ws.send(JSON.stringify({
+    const wsMessage = {
       type: 'permission-request',
       requestId,
       toolName,
@@ -468,9 +516,19 @@ function createCanUseTool(ws) {
       toolUseID,
       suggestions: suggestions || [],
       timestamp: Date.now()
-    }));
+    };
+    ws.send(JSON.stringify(wsMessage));
 
     console.log(`📤 Permission request sent to frontend: ${requestId}`);
+
+    // Record to debug log (Layer 1: SDK callback params, Layer 2: WebSocket message)
+    addDebugMessage({
+      id: requestId,
+      sessionId: ws.sessionId || 'unknown',
+      layer1: { toolName, input, toolUseID, suggestions },
+      layer2: wsMessage,
+      source: 'permission-request'
+    });
 
     // Wait for user response
     return responsePromise;
@@ -554,20 +612,38 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
       // Transform and send message to WebSocket
       const transformedMessage = transformMessage(message);
-      ws.send(JSON.stringify({
+      const wsMessage = {
         type: 'claude-response',
         data: transformedMessage
-      }));
+      };
+      ws.send(JSON.stringify(wsMessage));
+
+      // Record to debug log (Layer 1: SDK raw, Layer 2: WebSocket wrapper)
+      addDebugMessage({
+        sessionId: capturedSessionId,
+        layer1: message,
+        layer2: wsMessage,
+        source: 'sdk-stream'
+      });
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
           console.log('📊 Token budget from modelUsage:', tokenBudget);
-          ws.send(JSON.stringify({
+          const tokenBudgetMessage = {
             type: 'token-budget',
             data: tokenBudget
-          }));
+          };
+          ws.send(JSON.stringify(tokenBudgetMessage));
+
+          // Record token budget message
+          addDebugMessage({
+            sessionId: capturedSessionId,
+            layer1: { type: 'token-budget-calculation', modelUsage: message.modelUsage },
+            layer2: tokenBudgetMessage,
+            source: 'token-budget'
+          });
         }
       }
     }
@@ -772,5 +848,7 @@ export {
   cleanupTimedOutPermissions,
   getAllSessionsStatus,
   getAllPendingPermissions,
-  getDebugInfo
+  getDebugInfo,
+  addDebugMessage,
+  getDebugMessages
 };
