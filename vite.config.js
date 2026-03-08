@@ -7,7 +7,11 @@ export default defineConfig(({ command, mode }) => {
   
   
   return {
-    plugins: [react()],
+    plugins: [react({
+      babel: {
+        plugins: [['module:@preact/signals-react-transform']],
+      },
+    })],
     define: {
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     },

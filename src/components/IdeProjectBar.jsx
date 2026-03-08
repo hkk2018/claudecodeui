@@ -55,6 +55,11 @@ export default function IdeProjectBar() {
     fetchProjects();
   });
 
+  // Hidden via settings
+  if (!uiSettings.value.showIdeProjectBar) {
+    return null;
+  }
+
   // Collapsed state: just show a thin bar with expand button
   if (collapsed.value) {
     return (

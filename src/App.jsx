@@ -24,7 +24,6 @@ import { Settings as SettingsIcon, Sparkles, Bug } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import IdeProjectBar from './components/IdeProjectBar';
-import { uiSettings } from './stores/uiSettings';
 import MobileNav from './components/MobileNav';
 import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
@@ -817,8 +816,8 @@ function AppContent() {
 
       {/* Main Content Area - Flexible */}
       <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
-        {/* IDE Project Bar - top level, always visible */}
-        {uiSettings.value.showIdeProjectBar && <IdeProjectBar />}
+        {/* IDE Project Bar - top level, visibility controlled internally */}
+        <IdeProjectBar />
 
         <MainContent
           selectedProject={selectedProject}
