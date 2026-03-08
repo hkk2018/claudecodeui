@@ -22,9 +22,11 @@ import TaskDetail from './TaskDetail';
 import PRDEditor from './PRDEditor';
 import Tooltip from './Tooltip';
 import FloatingSidebarButton from './FloatingSidebarButton';
+import IdeProjectBar from './IdeProjectBar';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
+import { uiSettings } from '../stores/uiSettings';
 
 function MainContent({
   selectedProject,
@@ -484,6 +486,9 @@ function MainContent({
           </div>
         </div>
       </div>
+
+      {/* IDE Project Bar */}
+      {uiSettings.value.showIdeProjectBar && <IdeProjectBar />}
 
       {/* Content Area with Right Sidebar */}
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
