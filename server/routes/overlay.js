@@ -22,12 +22,13 @@ router.post('/launch', async (req, res) => {
         });
         chrome.unref();
 
-        // After delay, set always-on-top using wmctrl
+        // TODO: fix - wmctrl always-on-top not working (user can manually pin via desktop)
         setTimeout(() => {
-            exec(`wmctrl -r "localhost:${port}" -b add,above`, (err) => {
+            const env = { ...process.env, DISPLAY: process.env.DISPLAY || ':1' };
+            exec(`wmctrl -r "Claude Code UI" -b add,above`, { env }, (err) => {
                 if (err) {
-                    // Try alternative title matching
-                    exec(`wmctrl -r "Claude" -b add,above`, () => {});
+                    // Fallback: try matching by localhost URL
+                    exec(`wmctrl -r "localhost:${port}" -b add,above`, { env }, () => {});
                 }
             });
         }, 2000);
@@ -43,10 +44,11 @@ router.post('/pin', async (req, res) => {
     const { pin = true } = req.body || {};
     const port = req.app.locals.port || 9001;
     const action = pin ? 'add' : 'remove';
+    const env = { ...process.env, DISPLAY: process.env.DISPLAY || ':1' };
 
-    exec(`wmctrl -r "localhost:${port}" -b ${action},above`, (err) => {
+    exec(`wmctrl -r "Claude Code UI" -b ${action},above`, { env }, (err) => {
         if (err) {
-            exec(`wmctrl -r "Claude" -b ${action},above`, (err2) => {
+            exec(`wmctrl -r "localhost:${port}" -b ${action},above`, { env }, (err2) => {
                 if (err2) {
                     return res.status(500).json({ success: false, error: 'Window not found' });
                 }
