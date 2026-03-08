@@ -158,6 +158,20 @@ export const api = {
       }),
   },
 
+  // Overlay window
+  overlay: {
+    launch: (options = {}) =>
+      authenticatedFetch('/api/overlay/launch', {
+        method: 'POST',
+        body: JSON.stringify(options),
+      }),
+    pin: (pin = true) =>
+      authenticatedFetch('/api/overlay/pin', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+  },
+
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
 };

@@ -82,6 +82,7 @@ import agentRoutes from './routes/agent.js';
 import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
+import overlayRoutes from './routes/overlay.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -267,6 +268,9 @@ app.use('/api/cli', authenticateToken, cliAuthRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
+
+// Overlay API Routes (protected)
+app.use('/api/overlay', authenticateToken, overlayRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -1738,6 +1742,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const PORT = cliArgs.port || process.env.PORT || 3001;
+app.locals.port = PORT;
 
 // Initialize database and start server
 async function startServer() {

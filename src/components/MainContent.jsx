@@ -350,6 +350,31 @@ function MainContent({
             </div>
           </div>
           
+          {/* Overlay Launch Button */}
+          <div className="flex-shrink-0 hidden sm:flex items-center mr-2">
+            <Tooltip content="Launch Overlay Window" position="bottom">
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await api.overlay.launch();
+                    const data = await response.json();
+                    if (!data.success) {
+                      console.error('Failed to launch overlay:', data.error);
+                    }
+                  } catch (err) {
+                    console.error('Failed to launch overlay:', err);
+                  }
+                }}
+                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                title="Launch as overlay window"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </button>
+            </Tooltip>
+          </div>
+
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block">
             <div className="relative flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
