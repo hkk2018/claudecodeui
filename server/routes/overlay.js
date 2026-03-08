@@ -142,6 +142,63 @@ router.get('/ide-projects', async (req, res) => {
     res.json({ projects: results });
 });
 
+// POST /api/overlay/ide-projects/focus-by-name - focus IDE window by project name
+// Must be before :id/focus to avoid route conflict
+router.post('/ide-projects/focus-by-name', async (req, res) => {
+    const { projectName } = req.body || {};
+    if (!projectName) {
+        return res.status(400).json({ success: false, error: 'projectName required' });
+    }
+
+    const env = { ...process.env };
+    if (!env.DISPLAY) env.DISPLAY = ':1';
+
+    const builtinEditors = {
+        cursor: { window_class: 'Cursor' },
+        vscode: { window_class: 'Code' },
+    };
+
+    // Extract folder name from path-style project names like "-home-ubuntu-Projects-ken-onexas"
+    const projectNameLower = projectName.toLowerCase();
+    const folderName = projectName.split('-').pop().toLowerCase();
+    // Also try converting path format back: "-home-ubuntu-Projects-ken-onexas" -> "onexas"
+    const pathParts = projectName.replace(/^-/, '').split('-');
+    const lastFolder = pathParts[pathParts.length - 1]?.toLowerCase();
+
+    for (const [editorType, { window_class }] of Object.entries(builtinEditors)) {
+        try {
+            const { stdout } = await execAsync(
+                `xdotool search --class "${window_class}"`,
+                { env, timeout: 2000 }
+            );
+            const windowIds = stdout.trim().split('\n').filter(id => id);
+
+            for (const wid of windowIds) {
+                try {
+                    const { stdout: windowName } = await execAsync(
+                        `xdotool getwindowname ${wid}`,
+                        { env, timeout: 1000 }
+                    );
+                    const name = windowName.trim();
+                    const extracted = extractProjectName(name, editorType);
+                    const extractedLower = extracted.toLowerCase();
+
+                    if (extractedLower === projectNameLower || extractedLower === folderName || extractedLower === lastFolder) {
+                        await execAsync(`xdotool windowactivate ${wid}`, { env, timeout: 2000 });
+                        return res.json({ success: true, windowId: wid, projectName: extracted });
+                    }
+                } catch {
+                    continue;
+                }
+            }
+        } catch {
+            continue;
+        }
+    }
+
+    res.json({ success: false, error: 'No matching IDE window found' });
+});
+
 // POST /api/overlay/ide-projects/:id/focus - focus IDE window
 router.post('/ide-projects/:id/focus', async (req, res) => {
     const { id } = req.params;

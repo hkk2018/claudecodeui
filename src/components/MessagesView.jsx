@@ -5,7 +5,8 @@ import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
-import { MessageSquare, Clock, Search, X, Folder, User, Bot, ChevronRight } from 'lucide-react';
+import { MessageSquare, Clock, Search, X, Folder, User, Bot } from 'lucide-react';
+import { api } from '../utils/api';
 
 // Format time ago helper
 const formatTimeAgo = (dateString, currentTime) => {
@@ -245,8 +246,22 @@ function MessagesView({
           )}
         </div>
 
-        {/* Hover arrow */}
-        <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        {/* Focus IDE window button - top right */}
+        <button
+          className="absolute right-1 top-1 z-10 w-5 h-5 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            api.overlay.focusIdeByName(session.__projectName).then(r => r.json()).then(data => {
+              if (!data.success) console.log('No matching IDE window for:', session.__projectName);
+            }).catch(() => {});
+          }}
+          title={`Focus ${session.__projectName} in IDE`}
+        >
+          <svg className="w-3 h-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </button>
       </div>
     );
   };

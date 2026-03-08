@@ -175,6 +175,11 @@ export const api = {
       authenticatedFetch(`/api/overlay/ide-projects/${windowId}/focus`, {
         method: 'POST',
       }),
+    focusIdeByName: (projectName) =>
+      authenticatedFetch('/api/overlay/ide-projects/focus-by-name', {
+        method: 'POST',
+        body: JSON.stringify({ projectName }),
+      }),
   },
 
   // Generic GET method for any endpoint
