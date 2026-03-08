@@ -33,6 +33,12 @@ export const accessOrder = signal([]);
  */
 const MAX_CACHED_SESSIONS = 10;
 
+/**
+ * Session processing state
+ * 結構：{ sessionId: { isLoading: boolean, canAbort: boolean } }
+ */
+export const sessionProcessingState = signal({});
+
 // === Computed Values ===
 
 /**
@@ -51,6 +57,15 @@ export const currentPagination = computed(() => {
   const id = currentSessionId.value;
   if (!id) return { offset: 0, hasMore: false, total: 0 };
   return sessionCache.value[id]?.pagination || { offset: 0, hasMore: false, total: 0 };
+});
+
+/**
+ * 當前 session 的 processing state
+ */
+export const currentProcessingState = computed(() => {
+  const id = currentSessionId.value;
+  if (!id) return { isLoading: false, canAbort: false };
+  return sessionProcessingState.value[id] || { isLoading: false, canAbort: false };
 });
 
 /**
@@ -141,6 +156,9 @@ export function clearSession(sessionId) {
   sessionCache.value = newCache;
 
   accessOrder.value = accessOrder.value.filter(id => id !== sessionId);
+
+  // 同時清除 processing state
+  clearSessionProcessingState(sessionId);
 }
 
 /**
@@ -150,6 +168,56 @@ export function clearAllSessions() {
   sessionCache.value = {};
   accessOrder.value = [];
   currentSessionId.value = null;
+  sessionProcessingState.value = {};
+}
+
+/**
+ * 設定 session 的 processing state
+ */
+export function setSessionProcessingState(sessionId, { isLoading, canAbort }) {
+  if (!sessionId) return;
+
+  sessionProcessingState.value = {
+    ...sessionProcessingState.value,
+    [sessionId]: { isLoading, canAbort },
+  };
+}
+
+/**
+ * 更新 session 的 isLoading
+ */
+export function setSessionLoading(sessionId, isLoading) {
+  if (!sessionId) return;
+
+  const existing = sessionProcessingState.value[sessionId] || { isLoading: false, canAbort: false };
+  sessionProcessingState.value = {
+    ...sessionProcessingState.value,
+    [sessionId]: { ...existing, isLoading },
+  };
+}
+
+/**
+ * 更新 session 的 canAbort
+ */
+export function setSessionCanAbort(sessionId, canAbort) {
+  if (!sessionId) return;
+
+  const existing = sessionProcessingState.value[sessionId] || { isLoading: false, canAbort: false };
+  sessionProcessingState.value = {
+    ...sessionProcessingState.value,
+    [sessionId]: { ...existing, canAbort },
+  };
+}
+
+/**
+ * 清除 session 的 processing state（完成後清理）
+ */
+export function clearSessionProcessingState(sessionId) {
+  if (!sessionId) return;
+
+  const newState = { ...sessionProcessingState.value };
+  delete newState[sessionId];
+  sessionProcessingState.value = newState;
 }
 
 // === Internal Functions ===

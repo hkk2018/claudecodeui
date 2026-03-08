@@ -19,12 +19,17 @@ import {
   currentSessionId,
   currentMessages,
   currentPagination,
+  currentProcessingState,
   sessionCache,
   isSessionCached,
   switchToSession,
   setSessionMessages as storeSetMessages,
   prependSessionMessages as storePrependMessages,
   clearSession as clearSessionCache,
+  setSessionProcessingState,
+  setSessionLoading,
+  setSessionCanAbort,
+  clearSessionProcessingState,
 } from '../stores/sessionSignals';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1827,9 +1832,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     console.log('🔒 chatMessages count:', chatMessages.length, 'permission:', permissionMessages.length);
   }, [chatMessages]);
 
-  // Use Signal for isLoading to avoid unnecessary re-renders
-  // Signal only updates UI when value actually changes (true→true = no update)
-  const isLoading = useSignal(false);
+  // Processing state now comes from sessionSignals store (per-session)
+  // No need for local isLoading signal - read from currentProcessingState.value
+
   // currentSessionId is now derived from store's viewingSessionId for Claude sessions
   // For Cursor sessions, we still track separately
   const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
@@ -1868,7 +1873,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [selectedFileIndex, setSelectedFileIndex] = useState(-1);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
-  const [canAbortSession, setCanAbortSession] = useState(false);
+  // canAbortSession now comes from sessionSignals store (per-session)
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   // Pull-to-refresh at bottom state
@@ -3057,7 +3062,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setTokenBudget(null);
           // Reset loading state when switching sessions (unless the new session is processing)
           // The restore effect will set it back to true if needed
-          isLoading.value = false;
+          setSessionLoading(currentSessionId, false);
         }
 
         if (provider === 'cursor') {
@@ -3112,7 +3117,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       } else {
         // Only clear messages if this is NOT a system-initiated session change AND we're not loading
         // During system session changes or while loading, preserve the chat messages
-        if (!isSystemSessionChange && !isLoading.value) {
+        if (!isSystemSessionChange && !currentProcessingState.value.isLoading) {
           setChatMessages([]);
           setSessionMessages([]);
         }
@@ -3247,21 +3252,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Track processing state: notify parent when isLoading becomes true
   // Note: onSessionNotProcessing is called directly in completion message handlers
   useEffect(() => {
-    if (currentSessionId && isLoading.value && onSessionProcessing) {
+    if (currentSessionId && currentProcessingState.value.isLoading && onSessionProcessing) {
       onSessionProcessing(currentSessionId);
     }
-  }, [isLoading.value, currentSessionId, onSessionProcessing]);
+  }, [currentProcessingState.value.isLoading, currentSessionId, onSessionProcessing]);
 
   // Restore processing state when switching to a processing session
   useEffect(() => {
     if (currentSessionId && processingSessions) {
       const shouldBeProcessing = processingSessions.has(currentSessionId);
-      if (shouldBeProcessing && !isLoading.value) {
-        isLoading.value = true;
-        setCanAbortSession(true); // Assume processing sessions can be aborted
+      if (shouldBeProcessing && !currentProcessingState.value.isLoading) {
+        setSessionLoading(currentSessionId, true);
+        setSessionCanAbort(currentSessionId, true); // Assume processing sessions can be aborted
       }
     }
-  }, [currentSessionId, processingSessions]);
+  }, [currentSessionId, processingSessions, currentProcessingState.value.isLoading]);
 
   useEffect(() => {
     // Handle WebSocket messages
@@ -3634,8 +3639,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
           // Only update UI state if this is the current session
           if (cursorCompletedSessionId === currentSessionId) {
-            isLoading.value = false;
-            setCanAbortSession(false);
+            setSessionLoading(currentSessionId, false);
+            setSessionCanAbort(currentSessionId, false);
             setClaudeStatus(null);
             setSessionStartTime(null);
           }
@@ -3730,8 +3735,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
           // Update UI state if this is the current session OR if we don't have a session ID yet (new session)
           if (completedSessionId === currentSessionId || !currentSessionId) {
-            isLoading.value = false;
-            setCanAbortSession(false);
+            setSessionLoading(currentSessionId, false);
+            setSessionCanAbort(currentSessionId, false);
             setClaudeStatus(null);
             setSessionStartTime(null);
 
@@ -3782,8 +3787,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
           // Only update UI state if this is the current session
           if (abortedSessionId === currentSessionId) {
-            isLoading.value = false;
-            setCanAbortSession(false);
+            setSessionLoading(currentSessionId, false);
+            setSessionCanAbort(currentSessionId, false);
             setClaudeStatus(null);
             setSessionStartTime(null);
           }
@@ -3810,8 +3815,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (isCurrentSession) {
             if (latestMessage.isProcessing) {
               // Session is currently processing, restore UI state
-              isLoading.value = true;
-              setCanAbortSession(true);
+              setSessionLoading(currentSessionId, true);
+              setSessionCanAbort(currentSessionId, true);
               // Store the startTime from backend
               if (latestMessage.startTime) {
                 setSessionStartTime(latestMessage.startTime);
@@ -3860,8 +3865,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
 
             setClaudeStatus(statusInfo);
-            isLoading.value = true;
-            setCanAbortSession(statusInfo.can_interrupt);
+            setSessionLoading(currentSessionId, true);
+            setSessionCanAbort(currentSessionId, statusInfo.can_interrupt);
           }
           break;
   
@@ -4166,7 +4171,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!input.trim() || isLoading.value || !selectedProject) return;
+    if (!input.trim() || currentProcessingState.value.isLoading || !selectedProject) return;
 
     // Upload images first if any
     let uploadedImages = [];
@@ -4208,8 +4213,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     setChatMessages(prev => [...prev, userMessage]);
-    isLoading.value = true;
-    setCanAbortSession(true);
+    setSessionLoading(currentSessionId, true);
+    setSessionCanAbort(currentSessionId, true);
     // Set a default status when starting
     setClaudeStatus({
       text: 'Processing',
@@ -4296,7 +4301,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  }, [input, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
@@ -4402,7 +4407,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         return;
       }
     }
-    
+
     // Handle Tab key for mode switching (only when dropdowns are not showing)
     if (e.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
       e.preventDefault();
@@ -4560,12 +4565,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const handleNewSession = () => {
     setChatMessages([]);
     setInput('');
-    isLoading.value = false;
-    setCanAbortSession(false);
+    setSessionLoading(currentSessionId, false);
+    setSessionCanAbort(currentSessionId, false);
   };
   
   const handleAbortSession = () => {
-    if (currentSessionId && canAbortSession) {
+    if (currentSessionId && currentProcessingState.value.canAbort) {
       sendMessage({
         type: 'abort-session',
         sessionId: currentSessionId,
@@ -4573,6 +4578,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       });
     }
   };
+
+  // Global ESC key listener for aborting session
+  useEffect(() => {
+    const handleGlobalEsc = (e) => {
+      if (e.key === 'Escape' && currentProcessingState.value.isLoading && currentProcessingState.value.canAbort) {
+        e.preventDefault();
+        handleAbortSession();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalEsc);
+    return () => window.removeEventListener('keydown', handleGlobalEsc);
+  }, [currentSessionId, provider, sendMessage]);
 
   const handleModeSwitch = () => {
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
@@ -4831,7 +4849,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </>
         )}
 
-        {isLoading.value && (
+        {currentProcessingState.value.isLoading && (
           <div className="chat-message assistant">
             <div className="w-full">
               <div className="flex items-center space-x-3 mb-2">
@@ -4912,7 +4930,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         <div className="flex-1">
               <ClaudeStatus
                 status={claudeStatus}
-                isLoading={isLoading.value}
+                isLoading={currentProcessingState.value.isLoading}
                 onAbort={handleAbortSession}
                 provider={provider}
                 showThinking={showThinking}
@@ -5165,7 +5183,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 setIsTextareaExpanded(isExpanded);
               }}
               placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
-              disabled={isLoading.value}
+              disabled={currentProcessingState.value.isLoading}
               className={`chat-input-placeholder block w-full ${leftHandedMode ? 'pl-16 pr-12' : 'pl-12 pr-20'} sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200`}
               style={{ height: '50px' }}
             />
@@ -5192,7 +5210,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {/* Send button */}
             <button
               type="submit"
-              disabled={!input.trim() || isLoading.value}
+              disabled={!input.trim() || currentProcessingState.value.isLoading}
               onMouseDown={(e) => {
                 e.preventDefault();
                 handleSubmit(e);
