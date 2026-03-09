@@ -62,7 +62,10 @@ function Sidebar({
   onShowVersionModal,
   isPWA,
   isMobile,
-  onToggleSidebar
+  onToggleSidebar,
+  sidebarFullWidth,
+  onSidebarCycle,
+  sidebarDirection
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
@@ -530,21 +533,19 @@ function Sidebar({
               </div>
             </div>
           )}
-          {onToggleSidebar && (
+          {/* Sidebar cycle: collapsed → normal → full → normal → collapsed */}
+          {onSidebarCycle && (
             <Button
               variant="ghost"
               size="sm"
               className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200"
-              onClick={onToggleSidebar}
-              title="Hide sidebar"
+              onClick={onSidebarCycle}
+              title={sidebarDirection === 'expand' ? 'Expand' : 'Collapse'}
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d={sidebarDirection === 'expand' ? 'M9 5l7 7-7 7' : 'M15 19l-7-7 7-7'}
+                />
               </svg>
             </Button>
           )}

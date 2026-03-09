@@ -18,7 +18,7 @@
  * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { Settings as SettingsIcon, Sparkles, Bug } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -672,14 +672,78 @@ function AppContent() {
     );
   };
 
+  // Sidebar width for resizable splitter
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sidebarWidth');
+      return saved ? parseInt(saved, 10) : 320;
+    } catch { return 320; }
+  });
+  const [sidebarFullWidth, setSidebarFullWidth] = useState(false);
+  // Direction tracks whether next click expands or collapses
+  // 'expand': collapsed→normal→full, 'collapse': full→normal→collapsed
+  const [sidebarDirection, setSidebarDirection] = useState('collapse'); // normal state defaults to collapse direction
+  const isResizing = useRef(false);
+
+  const handleSidebarCycle = () => {
+    if (sidebarDirection === 'expand') {
+      // expanding: normal → full
+      if (!sidebarFullWidth) {
+        setSidebarFullWidth(true);
+        setSidebarDirection('collapse'); // at max, reverse
+      }
+    } else {
+      // collapsing: full → normal, or normal → collapsed
+      if (sidebarFullWidth) {
+        setSidebarFullWidth(false);
+        // stay collapse direction, next click will collapse
+      } else {
+        setSidebarVisible(false);
+        setSidebarDirection('expand'); // at min, reverse
+      }
+    }
+  };
+
+  const handleResizeStart = (e) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    let lastWidth = sidebarWidth;
+
+    const handleMouseMove = (e) => {
+      if (!isResizing.current) return;
+      lastWidth = Math.min(Math.max(e.clientX, 200), 600);
+      setSidebarWidth(lastWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      try { localStorage.setItem('sidebarWidth', String(lastWidth)); } catch {}
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className="fixed inset-0 flex flex-col bg-background">
+      {/* IDE Project Bar - top level, spans full width */}
+      <IdeProjectBar />
+
+      {/* Main layout: sidebar + content */}
+      <div className="flex-1 flex min-h-0">
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
         <div
           className={`h-full flex-shrink-0 border-r border-border bg-card transition-all duration-300 ${
-            sidebarVisible ? 'w-80' : 'w-14'
+            sidebarVisible ? (sidebarFullWidth ? 'flex-1' : '') : 'w-14'
           }`}
+          style={sidebarVisible && !sidebarFullWidth ? { width: sidebarWidth } : undefined}
         >
           <div className="h-full overflow-hidden">
             {sidebarVisible ? (
@@ -704,13 +768,16 @@ function AppContent() {
                 isPWA={isPWA}
                 isMobile={isMobile}
                 onToggleSidebar={() => setSidebarVisible(false)}
+                sidebarFullWidth={sidebarFullWidth}
+                onSidebarCycle={handleSidebarCycle}
+                sidebarDirection={sidebarDirection}
               />
             ) : (
               /* Collapsed Sidebar */
               <div className="h-full flex flex-col items-center py-4 gap-4">
                 {/* Expand Button */}
                 <button
-                  onClick={() => setSidebarVisible(true)}
+                  onClick={() => { setSidebarVisible(true); setSidebarDirection('expand'); }}
                   className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
                   aria-label="Show sidebar"
                   title="Show sidebar"
@@ -814,11 +881,16 @@ function AppContent() {
         </div>
       )}
 
-      {/* Main Content Area - Flexible */}
-      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
-        {/* IDE Project Bar - top level, visibility controlled internally */}
-        <IdeProjectBar />
+      {/* Resizable Splitter Handle */}
+      {!isMobile && sidebarVisible && !sidebarFullWidth && (
+        <div
+          className="w-1 hover:w-1.5 bg-transparent hover:bg-primary/20 cursor-col-resize flex-shrink-0 transition-all"
+          onMouseDown={handleResizeStart}
+        />
+      )}
 
+      {/* Main Content Area - Flexible (hidden when sidebar is full width) */}
+      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''} ${sidebarFullWidth && !isMobile ? 'hidden' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -875,6 +947,8 @@ function AppContent() {
           isMobile={isMobile}
         />
       )}
+
+      </div>{/* End main layout flex row */}
 
       {/* Settings Modal */}
       <Settings
