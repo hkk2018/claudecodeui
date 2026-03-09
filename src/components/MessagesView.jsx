@@ -82,6 +82,7 @@ function MessagesView({
   isPWA
 }) {
   const [searchFilter, setSearchFilter] = useState('');
+  const [previewSession, setPreviewSession] = useState(null);
 
   // Flatten all sessions from all projects with project info attached
   const allSessions = useMemo(() => {
@@ -232,11 +233,17 @@ function MessagesView({
           </div>
         </div>
 
-        {/* Last messages preview */}
+        {/* Last messages preview - click icons to see full message */}
         <div className="space-y-1.5 pl-8">
           {session.lastUserMessage && (
             <div className="flex items-start gap-1.5">
-              <User className="w-3 h-3 text-blue-500 mt-0.5 flex-shrink-0" />
+              <button
+                onClick={(e) => { e.stopPropagation(); setPreviewSession(session); }}
+                className="mt-0.5 flex-shrink-0 hover:scale-125 transition-transform cursor-pointer"
+                title="View full message"
+              >
+                <User className="w-3 h-3 text-blue-500" />
+              </button>
               <p className="text-xs text-muted-foreground line-clamp-1">
                 {truncateText(session.lastUserMessage, 60)}
               </p>
@@ -244,7 +251,13 @@ function MessagesView({
           )}
           {session.lastAssistantMessage && (
             <div className="flex items-start gap-1.5">
-              <Bot className="w-3 h-3 text-orange-500 mt-0.5 flex-shrink-0" />
+              <button
+                onClick={(e) => { e.stopPropagation(); setPreviewSession(session); }}
+                className="mt-0.5 flex-shrink-0 hover:scale-125 transition-transform cursor-pointer"
+                title="View full message"
+              >
+                <Bot className="w-3 h-3 text-orange-500" />
+              </button>
               <p className="text-xs text-muted-foreground line-clamp-2">
                 {truncateText(session.lastAssistantMessage, 100)}
               </p>
@@ -338,6 +351,66 @@ function MessagesView({
           )}
         </div>
       </ScrollArea>
+
+      {/* Message Preview Modal */}
+      {previewSession && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          onClick={() => setPreviewSession(null)}
+        >
+          <div
+            className="bg-card border border-border rounded-lg shadow-lg w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col mx-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="text-sm font-medium text-foreground truncate">
+                  {previewSession.summary || previewSession.name || 'Session'}
+                </h3>
+                <span className="text-xs text-muted-foreground flex-shrink-0">
+                  {previewSession.__projectDisplayName}
+                </span>
+              </div>
+              <button
+                onClick={() => setPreviewSession(null)}
+                className="p-1 hover:bg-accent rounded transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {previewSession.lastUserMessage && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-medium text-blue-500">User</span>
+                  </div>
+                  <p className="text-sm text-foreground whitespace-pre-wrap pl-5.5">
+                    {previewSession.lastUserMessage}
+                  </p>
+                </div>
+              )}
+              {previewSession.lastAssistantMessage && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Bot className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs font-medium text-orange-500">Assistant</span>
+                  </div>
+                  <p className="text-sm text-foreground whitespace-pre-wrap pl-5.5">
+                    {previewSession.lastAssistantMessage}
+                  </p>
+                </div>
+              )}
+              {!previewSession.lastUserMessage && !previewSession.lastAssistantMessage && (
+                <p className="text-sm text-muted-foreground italic">No messages</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
