@@ -206,12 +206,23 @@ function MessagesView({
               </div>
             </div>
 
-            {/* Project name */}
+            {/* Project name - clickable to focus IDE window */}
             <div className="flex items-center gap-1 mt-0.5">
-              <Folder className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground truncate">
-                {session.__projectDisplayName}
-              </span>
+              <button
+                className="flex items-center gap-1 hover:underline cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  api.overlay.focusIdeByName(session.__projectName).then(r => r.json()).then(data => {
+                    if (!data.success) console.log('No matching IDE window for:', session.__projectName);
+                  }).catch(() => {});
+                }}
+                title={`Focus ${session.__projectDisplayName} in IDE`}
+              >
+                <Folder className="w-3 h-3 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground truncate">
+                  {session.__projectDisplayName}
+                </span>
+              </button>
               {session.messageCount > 0 && (
                 <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto h-4">
                   {session.messageCount}
@@ -246,22 +257,6 @@ function MessagesView({
           )}
         </div>
 
-        {/* Focus IDE window button - top right */}
-        <button
-          className="absolute right-1 top-1 z-10 w-5 h-5 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            api.overlay.focusIdeByName(session.__projectName).then(r => r.json()).then(data => {
-              if (!data.success) console.log('No matching IDE window for:', session.__projectName);
-            }).catch(() => {});
-          }}
-          title={`Focus ${session.__projectName} in IDE`}
-        >
-          <svg className="w-3 h-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </button>
       </div>
     );
   };
