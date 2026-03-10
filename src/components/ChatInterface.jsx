@@ -3553,9 +3553,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'permission-request':
-          // Handle permission request from SDK - display in chat with interactive buttons
+          // Phase 1 Fix: Only display permission request if it belongs to current session
           console.log('🔐 Permission request received:', latestMessage.requestId);
           console.log('   Tool:', latestMessage.toolName);
+          console.log('   Session ID:', latestMessage.sessionId);
+          console.log('   Current Session:', sessionId);
+
+          // Ignore permission requests from other sessions
+          if (latestMessage.sessionId && latestMessage.sessionId !== sessionId) {
+            console.log('⚠️ Ignoring permission request from different session:', latestMessage.sessionId);
+            break;
+          }
+
           console.log('   Current messages count:', chatMessages.length);
           setChatMessages(prev => {
             console.log('🔐 Adding permission request to messages, prev count:', prev.length);
@@ -3566,6 +3575,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               isPermissionRequest: true,
               permissionData: {
                 requestId: latestMessage.requestId,
+                sessionId: latestMessage.sessionId, // Store sessionId for cleanup
                 toolName: latestMessage.toolName,
                 toolInput: latestMessage.toolInput,
                 toolUseID: latestMessage.toolUseID,

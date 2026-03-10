@@ -511,6 +511,7 @@ function createCanUseTool(ws) {
     const wsMessage = {
       type: 'permission-request',
       requestId,
+      sessionId: ws.sessionId, // Add sessionId to bind permission to specific session
       toolName,
       toolInput: input,
       toolUseID,
