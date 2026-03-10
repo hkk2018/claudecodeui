@@ -68,10 +68,6 @@ function AppContent() {
   const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
   const [showFloatingButton, setShowFloatingButton] = useLocalStorage('showFloatingButton', true);
 
-  // Processing Sessions: Track which sessions are currently thinking/processing
-  // This allows us to restore the "Thinking..." banner when switching back to a processing session
-  const [processingSessions, setProcessingSessions] = useState(new Set());
-
   // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
@@ -455,26 +451,6 @@ function AppContent() {
       prevProjects.filter(project => project.name !== projectName)
     );
   };
-
-  // Processing Session Functions: Track which sessions are currently thinking/processing
-
-  // markSessionAsProcessing: Called when Claude starts thinking/processing
-  const markSessionAsProcessing = useCallback((sessionId) => {
-    if (sessionId) {
-      setProcessingSessions(prev => new Set([...prev, sessionId]));
-    }
-  }, []);
-
-  // markSessionAsNotProcessing: Called when Claude finishes thinking/processing
-  const markSessionAsNotProcessing = useCallback((sessionId) => {
-    if (sessionId) {
-      setProcessingSessions(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(sessionId);
-        return newSet;
-      });
-    }
-  }, []);
 
   // Version Upgrade Modal Component
   const VersionUpgradeModal = () => {
@@ -904,9 +880,6 @@ function AppContent() {
           onMenuClick={() => setSidebarOpen(true)}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
-          onSessionProcessing={markSessionAsProcessing}
-          onSessionNotProcessing={markSessionAsNotProcessing}
-          processingSessions={processingSessions}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowSettings(true)}
           autoExpandTools={autoExpandTools}

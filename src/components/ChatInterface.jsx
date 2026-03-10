@@ -1809,7 +1809,7 @@ const DEFAULT_PAGINATION = { offset: 0, hasMore: false, total: 0 };
 // - Switching sessions is instant if already cached
 // - No Session Protection needed - background sessions continue receiving messages
 // - No closure traps or dependency array issues
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionProcessing, onSessionNotProcessing, processingSessions, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks, onSessionLoaded }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks, onSessionLoaded }) {
   const { tasksEnabled } = useTasksSettings();
 
   const [input, setInput] = useState(() => {
@@ -3087,6 +3087,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setCurrentSessionId(selectedSession.id);
           switchToSession(selectedSession.id);
 
+          // Clear UI state immediately when switching sessions (will be restored by server response)
+          setClaudeStatus(null);
+          setSessionStartTime(null);
+
+          // Query server for current processing state of this session
+          // Signal already preserves state across switches, but this syncs with server truth
+          if (sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider: 'claude'
+            });
+          }
+
           // Only load messages from API if this is a user-initiated session change
           // For system-initiated changes, preserve existing messages and rely on WebSocket
           if (!isSystemSessionChange) {
@@ -3248,25 +3262,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
   }, [selectedProject?.name]);
-
-  // Track processing state: notify parent when isLoading becomes true
-  // Note: onSessionNotProcessing is called directly in completion message handlers
-  useEffect(() => {
-    if (currentSessionId && currentProcessingState.value.isLoading && onSessionProcessing) {
-      onSessionProcessing(currentSessionId);
-    }
-  }, [currentProcessingState.value.isLoading, currentSessionId, onSessionProcessing]);
-
-  // Restore processing state when switching to a processing session
-  useEffect(() => {
-    if (currentSessionId && processingSessions) {
-      const shouldBeProcessing = processingSessions.has(currentSessionId);
-      if (shouldBeProcessing && !currentProcessingState.value.isLoading) {
-        setSessionLoading(currentSessionId, true);
-        setSessionCanAbort(currentSessionId, true); // Assume processing sessions can be aborted
-      }
-    }
-  }, [currentSessionId, processingSessions, currentProcessingState.value.isLoading]);
 
   useEffect(() => {
     // Handle WebSocket messages
@@ -3647,18 +3642,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Get session ID from message or fall back to current session
           const cursorCompletedSessionId = latestMessage.sessionId || currentSessionId;
 
-          // Only update UI state if this is the current session
-          if (cursorCompletedSessionId === currentSessionId) {
-            setSessionLoading(currentSessionId, false);
-            setSessionCanAbort(currentSessionId, false);
-            setClaudeStatus(null);
-            setSessionStartTime(null);
-          }
-
-          // Mark the completed session as not processing
+          // Clear processing state via signals (use completedSessionId, not currentSessionId)
           if (cursorCompletedSessionId) {
-            if (onSessionNotProcessing) {
-              onSessionNotProcessing(cursorCompletedSessionId);
+            setSessionLoading(cursorCompletedSessionId, false);
+            setSessionCanAbort(cursorCompletedSessionId, false);
+
+            // Only clear UI state if this is the current session
+            if (cursorCompletedSessionId === currentSessionId) {
+              setClaudeStatus(null);
+              setSessionStartTime(null);
             }
           }
 
@@ -3743,35 +3735,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
           console.log('🏁 claude-complete received:', { completedSessionId, currentSessionId, match: completedSessionId === currentSessionId });
 
-          // Update UI state if this is the current session OR if we don't have a session ID yet (new session)
-          if (completedSessionId === currentSessionId || !currentSessionId) {
-            setSessionLoading(currentSessionId, false);
-            setSessionCanAbort(currentSessionId, false);
-            setClaudeStatus(null);
-            setSessionStartTime(null);
-
-            // Fetch updated token usage after message completes
-            if (selectedProject && selectedSession?.id) {
-              const fetchUpdatedTokenUsage = async () => {
-                try {
-                  const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
-                  const response = await authenticatedFetch(url);
-                  if (response.ok) {
-                    const data = await response.json();
-                    setTokenBudget(data);
-                  }
-                } catch (error) {
-                  console.error('Failed to fetch updated token usage:', error);
-                }
-              };
-              fetchUpdatedTokenUsage();
-            }
-          }
-
-          // Mark the completed session as not processing
+          // Clear processing state via signals
           if (completedSessionId) {
-            if (onSessionNotProcessing) {
-              onSessionNotProcessing(completedSessionId);
+            setSessionLoading(completedSessionId, false);
+            setSessionCanAbort(completedSessionId, false);
+
+            // Only clear UI state if this is the current session
+            if (completedSessionId === currentSessionId || !currentSessionId) {
+              setClaudeStatus(null);
+              setSessionStartTime(null);
+
+              // Fetch updated token usage after message completes
+              if (selectedProject && selectedSession?.id) {
+                const fetchUpdatedTokenUsage = async () => {
+                  try {
+                    const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+                    const response = await authenticatedFetch(url);
+                    if (response.ok) {
+                      const data = await response.json();
+                      setTokenBudget(data);
+                    }
+                  } catch (error) {
+                    console.error('Failed to fetch updated token usage:', error);
+                  }
+                };
+                fetchUpdatedTokenUsage();
+              }
             }
           }
           
@@ -3795,18 +3784,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Get session ID from message or fall back to current session
           const abortedSessionId = latestMessage.sessionId || currentSessionId;
 
-          // Only update UI state if this is the current session
-          if (abortedSessionId === currentSessionId) {
-            setSessionLoading(currentSessionId, false);
-            setSessionCanAbort(currentSessionId, false);
-            setClaudeStatus(null);
-            setSessionStartTime(null);
-          }
-
-          // Mark the aborted session as not processing
+          // Clear processing state via signals
           if (abortedSessionId) {
-            if (onSessionNotProcessing) {
-              onSessionNotProcessing(abortedSessionId);
+            setSessionLoading(abortedSessionId, false);
+            setSessionCanAbort(abortedSessionId, false);
+
+            // If this is the current session, also clear UI state
+            if (abortedSessionId === currentSessionId) {
+              setClaudeStatus(null);
+              setSessionStartTime(null);
             }
           }
 
@@ -3820,23 +3806,31 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
         case 'session-status': {
           const statusSessionId = latestMessage.sessionId;
-          const isCurrentSession = statusSessionId === currentSessionId ||
-                                   (selectedSession && statusSessionId === selectedSession.id);
-          if (isCurrentSession) {
+
+          // Update processing state for the queried session (not just current session!)
+          if (statusSessionId) {
             if (latestMessage.isProcessing) {
-              // Session is currently processing, restore UI state
-              setSessionLoading(currentSessionId, true);
-              setSessionCanAbort(currentSessionId, true);
-              // Store the startTime from backend
-              if (latestMessage.startTime) {
-                setSessionStartTime(latestMessage.startTime);
+              // Session is currently processing on server
+              setSessionLoading(statusSessionId, true);
+              setSessionCanAbort(statusSessionId, true);
+
+              // If this is the current session, update UI state
+              if (statusSessionId === currentSessionId) {
+                if (latestMessage.startTime) {
+                  setSessionStartTime(latestMessage.startTime);
+                }
               }
-              if (onSessionProcessing) {
-                onSessionProcessing(statusSessionId);
-              }
+
             } else {
-              // Session is not processing, clear startTime
-              setSessionStartTime(null);
+              // Session is NOT processing on server - clear state
+              setSessionLoading(statusSessionId, false);
+              setSessionCanAbort(statusSessionId, false);
+
+              // If this is the current session, clear UI state
+              if (statusSessionId === currentSessionId) {
+                setClaudeStatus(null);
+                setSessionStartTime(null);
+              }
             }
           }
           break;
