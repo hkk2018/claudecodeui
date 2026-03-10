@@ -3552,10 +3552,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           console.log('🔐 Permission request received:', latestMessage.requestId);
           console.log('   Tool:', latestMessage.toolName);
           console.log('   Session ID:', latestMessage.sessionId);
-          console.log('   Current Session:', sessionId);
+          console.log('   Current Session:', currentSessionId);
 
           // Ignore permission requests from other sessions
-          if (latestMessage.sessionId && latestMessage.sessionId !== sessionId) {
+          if (latestMessage.sessionId && latestMessage.sessionId !== currentSessionId) {
             console.log('⚠️ Ignoring permission request from different session:', latestMessage.sessionId);
             break;
           }
