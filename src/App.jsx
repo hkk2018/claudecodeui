@@ -395,39 +395,20 @@ function AppContent() {
     try {
       const response = await api.projects();
       const freshProjects = await response.json();
-      
-      // Optimize to preserve object references and minimize re-renders
-      setProjects(prevProjects => {
-        // Check if projects data has actually changed
-        const hasChanges = freshProjects.some((newProject, index) => {
-          const prevProject = prevProjects[index];
-          if (!prevProject) return true;
-          
-          return (
-            newProject.name !== prevProject.name ||
-            newProject.displayName !== prevProject.displayName ||
-            newProject.fullPath !== prevProject.fullPath ||
-            JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
-            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
-          );
-        }) || freshProjects.length !== prevProjects.length;
-        
-        return hasChanges ? freshProjects : prevProjects;
-      });
-      
-      // If we have a selected project, make sure it's still selected after refresh
+
+      // Direct update without comparison - refresh button should always update
+      setProjects(freshProjects);
+
+      // Sync selected project and session references
       if (selectedProject) {
         const refreshedProject = freshProjects.find(p => p.name === selectedProject.name);
         if (refreshedProject) {
-          // Only update selected project if it actually changed
-          if (JSON.stringify(refreshedProject) !== JSON.stringify(selectedProject)) {
-            setSelectedProject(refreshedProject);
-          }
-          
-          // If we have a selected session, try to find it in the refreshed project
+          setSelectedProject(refreshedProject);
+
+          // Sync selected session if exists
           if (selectedSession) {
             const refreshedSession = refreshedProject.sessions?.find(s => s.id === selectedSession.id);
-            if (refreshedSession && JSON.stringify(refreshedSession) !== JSON.stringify(selectedSession)) {
+            if (refreshedSession) {
               setSelectedSession(refreshedSession);
             }
           }
