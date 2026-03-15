@@ -16,7 +16,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useSignal } from '@preact/signals-react';
 import {
-  currentSessionId,
   currentMessages,
   currentPagination,
   currentProcessingState,
@@ -1835,9 +1834,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Processing state now comes from sessionSignals store (per-session)
   // No need for local isLoading signal - read from currentProcessingState.value
 
-  // currentSessionId is now derived from store's viewingSessionId for Claude sessions
-  // For Cursor sessions, we still track separately
-  const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
+  // currentSessionId is now derived from selectedSession?.id directly (no local state)
+  // This prevents sync issues where local state doesn't update when selectedSession changes
   const [isInputFocused, setIsInputFocused] = useState(false);
   // sessionMessages now comes from store for Claude sessions
   const [sessionMessages, setSessionMessages] = useState([]);
@@ -2243,7 +2241,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const context = {
         projectPath: selectedProject.path,
         projectName: selectedProject.name,
-        sessionId: currentSessionId,
+        sessionId: selectedSession?.id,
         provider,
         model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
         tokenUsage: tokenBudget
@@ -2293,7 +2291,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         timestamp: Date.now()
       }]);
     }
-  }, [input, selectedProject, currentSessionId, provider, cursorModel, tokenBudget]);
+  }, [input, selectedProject, selectedSession, provider, cursorModel, tokenBudget]);
 
   // Handle built-in command actions
 
@@ -3035,7 +3033,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const loadStart = performance.now();
       console.log('[INIT] 📨 ChatInterface loadMessages triggered:', {
         selectedSessionId: selectedSession?.id?.slice(0, 8),
-        currentSessionId: currentSessionId?.slice(0, 8),
         selectedProjectName: selectedProject?.name,
         isSystemSessionChange
       });
@@ -3054,7 +3051,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         isLoadingSessionRef.current = true;
 
         // Only reset state if the session ID actually changed (not initial load)
-        const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
+        const sessionChanged = lastLoadedSessionRef.current !== null && lastLoadedSessionRef.current !== selectedSession.id;
 
         if (sessionChanged) {
           // Reset token budget when switching sessions
@@ -3062,12 +3059,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setTokenBudget(null);
           // Reset loading state when switching sessions (unless the new session is processing)
           // The restore effect will set it back to true if needed
-          setSessionLoading(currentSessionId, false);
+          setSessionLoading(lastLoadedSessionRef.current, false);
         }
 
         if (provider === 'cursor') {
           // For Cursor, set the session ID for resuming
-          setCurrentSessionId(selectedSession.id);
           sessionStorage.setItem('cursorSessionId', selectedSession.id);
 
           // Only load messages from SQLite if this is NOT a system-initiated session change
@@ -3084,7 +3080,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         } else {
           // For Claude, use Session Signals for caching
-          setCurrentSessionId(selectedSession.id);
           switchToSession(selectedSession.id);
 
           // Clear UI state immediately when switching sessions (will be restored by server response)
@@ -3135,7 +3130,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setChatMessages([]);
           setSessionMessages([]);
         }
-        setCurrentSessionId(null);
         switchToSession(null);
         sessionStorage.removeItem('cursorSessionId');
       }
@@ -3277,15 +3271,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const messageSessionId = latestMessage.sessionId || latestMessage.data?.session_id;
 
       // Filter out messages that belong to other sessions:
-      // 1. For existing sessions (currentSessionId is set): Only accept messages with matching session ID
-      // 2. For new sessions (currentSessionId is null): Check against pendingSessionId (if exists)
+      // 1. For existing sessions (selectedSession?.id is set): Only accept messages with matching session ID
+      // 2. For new sessions (selectedSession?.id is null): Check against pendingSessionId (if exists)
       // 3. Global messages always pass through
       if (!isGlobalMessage && messageSessionId) {
-        if (currentSessionId && messageSessionId !== currentSessionId) {
+        if (selectedSession?.id && messageSessionId !== selectedSession.id) {
           // Message is for a different session, ignore it
           return;
         }
-        if (!currentSessionId) {
+        if (!selectedSession?.id) {
           // This is a new session (no ID yet), check against pendingSessionId
           const pendingSessionId = sessionStorage.getItem('pendingSessionId');
           if (pendingSessionId && messageSessionId !== pendingSessionId) {
@@ -3303,7 +3297,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
           // Store it temporarily until conversation completes (prevents premature session association)
-          if (latestMessage.sessionId && !currentSessionId) {
+          if (latestMessage.sessionId && !selectedSession?.id) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
             // Update signal with the new session ID
             switchToSession(latestMessage.sessionId);
@@ -3385,12 +3379,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (latestMessage.data.type === 'system' &&
               latestMessage.data.subtype === 'init' &&
               latestMessage.data.session_id &&
-              currentSessionId &&
-              latestMessage.data.session_id !== currentSessionId &&
-              selectedSession?.id === currentSessionId) { // ← Only navigate if user is still on this session
+              selectedSession?.id &&
+              latestMessage.data.session_id !== selectedSession.id) {
 
             console.log('🔄 Claude CLI session duplication detected:', {
-              originalSession: currentSessionId,
+              originalSession: selectedSession.id,
               newSession: latestMessage.data.session_id
             });
 
@@ -3406,12 +3399,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             return; // Don't process the message further, let the navigation handle it
           }
           
-          // Handle system/init for new sessions (when currentSessionId is null)
+          // Handle system/init for new sessions (when selectedSession?.id is null)
           // Only navigate if user is still on this session (hasn't switched away)
           if (latestMessage.data.type === 'system' &&
               latestMessage.data.subtype === 'init' &&
               latestMessage.data.session_id &&
-              !currentSessionId &&
               !selectedSession?.id) { // ← Only navigate if user hasn't selected another session
 
             console.log('🔄 New session init detected:', {
@@ -3429,11 +3421,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           
           // For system/init messages that match current session, just ignore them
-          if (latestMessage.data.type === 'system' && 
-              latestMessage.data.subtype === 'init' && 
-              latestMessage.data.session_id && 
-              currentSessionId && 
-              latestMessage.data.session_id === currentSessionId) {
+          if (latestMessage.data.type === 'system' &&
+              latestMessage.data.subtype === 'init' &&
+              latestMessage.data.session_id &&
+              selectedSession?.id &&
+              latestMessage.data.session_id === selectedSession.id) {
             console.log('🔄 System init message for current session, ignoring');
             return; // Don't process the message further
           }
@@ -3552,10 +3544,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           console.log('🔐 Permission request received:', latestMessage.requestId);
           console.log('   Tool:', latestMessage.toolName);
           console.log('   Session ID:', latestMessage.sessionId);
-          console.log('   Current Session:', currentSessionId);
+          console.log('   Current Session:', selectedSession?.id);
 
           // Ignore permission requests from other sessions
-          if (latestMessage.sessionId && latestMessage.sessionId !== currentSessionId) {
+          if (latestMessage.sessionId && latestMessage.sessionId !== selectedSession?.id) {
             console.log('⚠️ Ignoring permission request from different session:', latestMessage.sessionId);
             break;
           }
@@ -3588,8 +3580,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             const cdata = latestMessage.data;
             if (cdata && cdata.type === 'system' && cdata.subtype === 'init' && cdata.session_id) {
               // If we already have a session and this differs, switch (duplication/redirect)
-              if (currentSessionId && cdata.session_id !== currentSessionId) {
-                console.log('🔄 Cursor session switch detected:', { originalSession: currentSessionId, newSession: cdata.session_id });
+              if (selectedSession?.id && cdata.session_id !== selectedSession.id) {
+                console.log('🔄 Cursor session switch detected:', { originalSession: selectedSession.id, newSession: cdata.session_id });
                 setIsSystemSessionChange(true);
                 if (onNavigateToSession) {
                   onNavigateToSession(cdata.session_id);
@@ -3597,7 +3589,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 return;
               }
               // If we don't yet have a session, adopt this one
-              if (!currentSessionId) {
+              if (!selectedSession?.id) {
                 console.log('🔄 Cursor new session init detected:', { newSession: cdata.session_id });
                 setIsSystemSessionChange(true);
                 if (onNavigateToSession) {
@@ -3640,22 +3632,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
         case 'cursor-result':
           // Get session ID from message or fall back to current session
-          const cursorCompletedSessionId = latestMessage.sessionId || currentSessionId;
+          const cursorCompletedSessionId = latestMessage.sessionId || selectedSession?.id;
 
-          // Clear processing state via signals (use completedSessionId, not currentSessionId)
+          // Clear processing state via signals (use completedSessionId, not selectedSession?.id)
           if (cursorCompletedSessionId) {
             setSessionLoading(cursorCompletedSessionId, false);
             setSessionCanAbort(cursorCompletedSessionId, false);
 
             // Only clear UI state if this is the current session
-            if (cursorCompletedSessionId === currentSessionId) {
+            if (cursorCompletedSessionId === selectedSession?.id) {
               setClaudeStatus(null);
               setSessionStartTime(null);
             }
           }
 
           // Only process result for current session
-          if (cursorCompletedSessionId === currentSessionId) {
+          if (cursorCompletedSessionId === selectedSession?.id) {
             try {
               const r = latestMessage.data || {};
               const textResult = typeof r.result === 'string' ? r.result : '';
@@ -3688,8 +3680,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
           // Store session ID for future use and trigger refresh (for new sessions)
           const pendingCursorSessionId = sessionStorage.getItem('pendingSessionId');
-          if (cursorCompletedSessionId && !currentSessionId && cursorCompletedSessionId === pendingCursorSessionId) {
-            setCurrentSessionId(cursorCompletedSessionId);
+          if (cursorCompletedSessionId && !selectedSession?.id && cursorCompletedSessionId === pendingCursorSessionId) {
             sessionStorage.removeItem('pendingSessionId');
 
             // Trigger a project refresh to update the sidebar with the new session
@@ -3732,8 +3723,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
         case 'claude-complete':
           // Get session ID from message or fall back to current session
-          const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
-          console.log('🏁 claude-complete received:', { completedSessionId, currentSessionId, match: completedSessionId === currentSessionId });
+          const completedSessionId = latestMessage.sessionId || selectedSession?.id || sessionStorage.getItem('pendingSessionId');
+          console.log('🏁 claude-complete received:', { completedSessionId, selectedSessionId: selectedSession?.id, match: completedSessionId === selectedSession?.id });
 
           // Clear processing state via signals
           if (completedSessionId) {
@@ -3741,7 +3732,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setSessionCanAbort(completedSessionId, false);
 
             // Only clear UI state if this is the current session
-            if (completedSessionId === currentSessionId || !currentSessionId) {
+            if (completedSessionId === selectedSession?.id || !selectedSession?.id) {
               setClaudeStatus(null);
               setSessionStartTime(null);
 
@@ -3763,11 +3754,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }
             }
           }
-          
+
           // If we have a pending session ID and the conversation completed successfully, use it
           const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-          if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
-                setCurrentSessionId(pendingSessionId);
+          if (pendingSessionId && !selectedSession?.id && latestMessage.exitCode === 0) {
             sessionStorage.removeItem('pendingSessionId');
 
             // No need to manually refresh - projects_updated WebSocket message will handle it
@@ -3782,7 +3772,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
         case 'session-aborted': {
           // Get session ID from message or fall back to current session
-          const abortedSessionId = latestMessage.sessionId || currentSessionId;
+          const abortedSessionId = latestMessage.sessionId || selectedSession?.id;
 
           // Clear processing state via signals
           if (abortedSessionId) {
@@ -3790,7 +3780,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setSessionCanAbort(abortedSessionId, false);
 
             // If this is the current session, also clear UI state
-            if (abortedSessionId === currentSessionId) {
+            if (abortedSessionId === selectedSession?.id) {
               setClaudeStatus(null);
               setSessionStartTime(null);
             }
@@ -3815,7 +3805,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               setSessionCanAbort(statusSessionId, true);
 
               // If this is the current session, update UI state
-              if (statusSessionId === currentSessionId) {
+              if (statusSessionId === selectedSession?.id) {
                 if (latestMessage.startTime) {
                   setSessionStartTime(latestMessage.startTime);
                 }
@@ -3827,7 +3817,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               setSessionCanAbort(statusSessionId, false);
 
               // If this is the current session, clear UI state
-              if (statusSessionId === currentSessionId) {
+              if (statusSessionId === selectedSession?.id) {
                 setClaudeStatus(null);
                 setSessionStartTime(null);
               }
@@ -3869,8 +3859,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
 
             setClaudeStatus(statusInfo);
-            setSessionLoading(currentSessionId, true);
-            setSessionCanAbort(currentSessionId, statusInfo.can_interrupt);
+            setSessionLoading(selectedSession?.id, true);
+            setSessionCanAbort(selectedSession?.id, statusInfo.can_interrupt);
           }
           break;
   
@@ -4217,8 +4207,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     setChatMessages(prev => [...prev, userMessage]);
-    setSessionLoading(currentSessionId, true);
-    setSessionCanAbort(currentSessionId, true);
+    setSessionLoading(selectedSession?.id, true);
+    setSessionCanAbort(selectedSession?.id, true);
     // Set a default status when starting
     setClaudeStatus({
       text: 'Processing',
@@ -4233,7 +4223,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
 
     // Determine effective session id for replies to avoid race on state updates
-    const effectiveSessionId = currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+    const effectiveSessionId = selectedSession?.id || sessionStorage.getItem('cursorSessionId');
 
     // Get tools settings from localStorage based on provider
     const getToolsSettings = () => {
@@ -4281,8 +4271,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         options: {
           projectPath: selectedProject.path,
           cwd: selectedProject.fullPath,
-          sessionId: currentSessionId,
-          resume: !!currentSessionId,
+          sessionId: selectedSession?.id,
+          resume: !!selectedSession?.id,
           toolsSettings: toolsSettings,
           permissionMode: permissionMode,
           images: uploadedImages // Pass images to backend
@@ -4305,7 +4295,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  }, [input, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, selectedProject, attachedImages, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
@@ -4492,7 +4482,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const cursorPos = e.target.selectionStart;
 
     // Auto-select Claude provider if no session exists and user starts typing
-    if (!currentSessionId && newValue.trim() && provider === 'claude') {
+    if (!selectedSession?.id && newValue.trim() && provider === 'claude') {
       // Provider is already set to 'claude' by default, so no need to change it
       // The session will be created automatically when they submit
     }
@@ -4569,15 +4559,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const handleNewSession = () => {
     setChatMessages([]);
     setInput('');
-    setSessionLoading(currentSessionId, false);
-    setSessionCanAbort(currentSessionId, false);
+    setSessionLoading(selectedSession?.id, false);
+    setSessionCanAbort(selectedSession?.id, false);
   };
-  
+
   const handleAbortSession = () => {
-    if (currentSessionId && currentProcessingState.value.canAbort) {
+    if (selectedSession?.id && currentProcessingState.value.canAbort) {
       sendMessage({
         type: 'abort-session',
-        sessionId: currentSessionId,
+        sessionId: selectedSession.id,
         provider: provider
       });
     }
@@ -4594,7 +4584,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     window.addEventListener('keydown', handleGlobalEsc);
     return () => window.removeEventListener('keydown', handleGlobalEsc);
-  }, [currentSessionId, provider, sendMessage]);
+  }, [selectedSession?.id, provider, sendMessage]);
 
   const handleModeSwitch = () => {
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
@@ -4659,7 +4649,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
         ) : chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            {!selectedSession && !currentSessionId && (
+            {!selectedSession && (
               <div className="text-center px-6 sm:px-4 py-8">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Choose Your AI Assistant</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-8">
