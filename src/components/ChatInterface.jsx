@@ -40,6 +40,10 @@ import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import ClaudeStatus from './ClaudeStatus';
 import TokenUsagePie from './TokenUsagePie';
 import { MicButton } from './MicButton.jsx';
+import { VoiceAssistantButton } from './VoiceAssistantButton.jsx';
+import { VoiceStatusOverlay } from './VoiceStatusOverlay.jsx';
+import { voiceModeEnabled, ttsEnabled, setVoiceState } from '../stores/voiceSignals';
+import { speakText, cancelSpeech } from '../utils/ttsEngine';
 import { api, authenticatedFetch } from '../utils/api';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
@@ -3751,6 +3755,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               };
               fetchUpdatedTokenUsage();
             }
+
+            // Voice mode: TTS for Claude's response
+            if (voiceModeEnabled.value && ttsEnabled.value) {
+              setChatMessages(prev => {
+                // Find last assistant text message
+                for (let i = prev.length - 1; i >= 0; i--) {
+                  const msg = prev[i];
+                  if (msg.type === 'assistant' && msg.content && !msg.isToolUse) {
+                    speakText(msg.content);
+                    setVoiceState('speaking');
+                    break;
+                  }
+                }
+                return prev; // no mutation
+              });
+            }
           }
 
           // Mark the completed session as not processing
@@ -4086,6 +4106,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       });
     }
   }, []);
+
+  // Handle voice assistant auto-send
+  const handleVoiceAutoSend = useCallback((text) => {
+    if (!text.trim() || isLoading.value || !selectedProject) return;
+    setInput(text);
+    setTimeout(() => {
+      if (handleSubmitRef.current) {
+        handleSubmitRef.current({ preventDefault: () => {} });
+      }
+    }, 50);
+  }, [selectedProject]);
 
   // Load earlier messages by increasing the visible message count
   const loadEarlierMessages = useCallback(() => {
@@ -5053,6 +5084,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
         </div>
         
+        {/* Voice mode status overlay */}
+        <div className="max-w-4xl mx-auto">
+          <VoiceStatusOverlay />
+        </div>
+
         <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
           {/* Drag overlay */}
           {isDragActive && (
@@ -5181,11 +5217,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </svg>
             </button>
 
-            {/* Mic button - HIDDEN */}
-            <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
-              <MicButton
-                onTranscript={handleTranscript}
-                className="w-10 h-10 sm:w-10 sm:h-10"
+            {/* Voice Assistant button */}
+            <div className={`absolute ${leftHandedMode ? 'left-16' : 'right-16'} top-1/2 transform -translate-y-1/2`}>
+              <VoiceAssistantButton
+                onAutoSend={handleVoiceAutoSend}
+                className="w-10 h-10"
               />
             </div>
 
