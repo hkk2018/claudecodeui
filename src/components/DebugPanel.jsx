@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, AlertCircle, Clock, Activity, MessageSquare, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, RefreshCw, AlertCircle, Clock, Activity, MessageSquare, ChevronDown, ChevronRight, Mic } from 'lucide-react';
 import { authenticatedFetch } from '../utils/api';
+import { VoiceTestPanel } from './VoiceTestPanel';
 
 function DebugPanel({ isOpen, onClose }) {
+  const [activeTab, setActiveTab] = useState('debug'); // 'debug' | 'voice'
   const [debugInfo, setDebugInfo] = useState(null);
   const [debugMessages, setDebugMessages] = useState({ messages: [], total: 0 });
   const [loading, setLoading] = useState(false);
@@ -117,23 +119,27 @@ function DebugPanel({ isOpen, onClose }) {
             <h2 className="text-xl font-semibold">Debug Monitor</h2>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="rounded"
-              />
-              Auto-refresh
-            </label>
-            <button
-              onClick={fetchDebugInfo}
-              disabled={loading}
-              className="p-2 hover:bg-accent rounded-md transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+            {activeTab === 'debug' && (
+              <>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={autoRefresh}
+                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                    className="rounded"
+                  />
+                  Auto-refresh
+                </label>
+                <button
+                  onClick={fetchDebugInfo}
+                  disabled={loading}
+                  className="p-2 hover:bg-accent rounded-md transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </>
+            )}
             <button
               onClick={onClose}
               className="p-2 hover:bg-accent rounded-md transition-colors"
@@ -143,8 +149,39 @@ function DebugPanel({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* Tabs */}
+        <div className="flex border-b border-border">
+          <button
+            onClick={() => setActiveTab('debug')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors
+              ${activeTab === 'debug'
+                ? 'text-blue-500 border-b-2 border-blue-500'
+                : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            <Activity className="w-4 h-4" />
+            Debug
+          </button>
+          <button
+            onClick={() => setActiveTab('voice')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors
+              ${activeTab === 'voice'
+                ? 'text-green-500 border-b-2 border-green-500'
+                : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            <Mic className="w-4 h-4" />
+            Voice Test
+          </button>
+        </div>
+
+        {/* Voice Test Tab */}
+        {activeTab === 'voice' && (
+          <div className="flex-1 overflow-hidden">
+            <VoiceTestPanel />
+          </div>
+        )}
+
+        {/* Debug Tab Content */}
+        {activeTab === 'debug' && <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -391,7 +428,7 @@ function DebugPanel({ isOpen, onClose }) {
               </div>
             </section>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

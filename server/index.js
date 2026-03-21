@@ -1356,6 +1356,69 @@ Agent instructions:`;
 });
 
 // Image upload endpoint
+// Voice transcribe endpoint (whisper.cpp)
+app.post('/api/voice/transcribe', authenticateToken, async (req, res) => {
+    try {
+        const multer = (await import('multer')).default;
+        const { execFile } = await import('child_process');
+        const fs = (await import('fs')).promises;
+        const os = (await import('os')).default;
+        const path = (await import('path')).default;
+
+        const storage = multer.memoryStorage();
+        const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+
+        upload.single('audio')(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+            if (!req.file) {
+                return res.status(400).json({ error: 'No audio file provided' });
+            }
+
+            const tmpDir = path.join(os.tmpdir(), 'claude-voice');
+            await fs.mkdir(tmpDir, { recursive: true });
+
+            const inputPath = path.join(tmpDir, `input-${Date.now()}.wav`);
+            const convertedPath = path.join(tmpDir, `converted-${Date.now()}.wav`);
+
+            try {
+                await fs.writeFile(inputPath, req.file.buffer);
+
+                // Convert to 16kHz mono WAV via ffmpeg
+                await new Promise((resolve, reject) => {
+                    execFile('ffmpeg', ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-f', 'wav', convertedPath], (err) => {
+                        if (err) reject(err); else resolve();
+                    });
+                });
+
+                // Run whisper-cli
+                const whisperBin = '/home/ubuntu/Projects/ken/linux-dictation/whisper.cpp/build/bin/whisper-cli';
+                const modelPath = '/home/ubuntu/Projects/ken/linux-dictation/models/ggml-small.bin';
+
+                const text = await new Promise((resolve, reject) => {
+                    execFile(whisperBin, ['-m', modelPath, '-f', convertedPath, '-l', 'auto', '-nt', '-t', '4'],
+                        { timeout: 30000 }, (err, stdout, stderr) => {
+                        if (err) reject(err);
+                        else resolve(stdout.trim());
+                    });
+                });
+
+                res.json({ text, engine: 'whisper.cpp (small)' });
+            } catch (error) {
+                console.error('[Voice] Transcription error:', error);
+                res.status(500).json({ error: error.message });
+            } finally {
+                await fs.unlink(inputPath).catch(() => {});
+                await fs.unlink(convertedPath).catch(() => {});
+            }
+        });
+    } catch (error) {
+        console.error('[Voice] Endpoint error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
