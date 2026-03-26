@@ -4090,16 +4090,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
-  // Handle voice assistant auto-send
+  // Handle voice transcription - fill input only, don't auto-send
   const handleVoiceAutoSend = useCallback((text) => {
-    if (!text.trim() || isLoading.value || !selectedProject) return;
-    setInput(text);
-    setTimeout(() => {
-      if (handleSubmitRef.current) {
-        handleSubmitRef.current({ preventDefault: () => {} });
-      }
-    }, 50);
-  }, [selectedProject]);
+    if (!text.trim()) return;
+    setInput(prev => prev ? prev + ' ' + text : text);
+  }, []);
 
   // Load earlier messages by increasing the visible message count
   const loadEarlierMessages = useCallback(() => {
