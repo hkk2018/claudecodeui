@@ -5193,7 +5193,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }}
               placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={currentProcessingState.value.isLoading}
-              className={`chat-input-placeholder block w-full ${leftHandedMode ? 'pl-16 pr-12' : 'pl-12 pr-20'} sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200`}
+              className={`chat-input-placeholder block w-full ${leftHandedMode ? 'pl-16 pr-24 sm:pr-12' : 'pl-24 sm:pl-12 pr-20'} sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200`}
               style={{ height: '50px' }}
             />
             {/* Image upload button */}
@@ -5208,15 +5208,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </svg>
             </button>
 
-            {/* Voice Assistant button */}
-            <div className={`absolute ${leftHandedMode ? 'left-16' : 'right-16'} top-1/2 transform -translate-y-1/2`}>
-              <VoiceAssistantButton
-                onAutoSend={handleVoiceAutoSend}
-                className="w-10 h-10"
-              />
-            </div>
-
-            {/* Send button */}
+            {/* Send button - Mobile: small icon next to image, Desktop: large round button */}
             <button
               type="submit"
               disabled={!input.trim() || currentProcessingState.value.isLoading}
@@ -5228,10 +5220,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.preventDefault();
                 handleSubmit(e);
               }}
-              className={`absolute ${leftHandedMode ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800`}
+              className={`absolute ${leftHandedMode ? 'right-12 sm:left-2' : 'left-12 sm:right-2'} top-1/2 transform -translate-y-1/2 p-2 sm:p-0 sm:w-12 sm:h-12 hover:bg-gray-100 dark:hover:bg-gray-700 sm:bg-blue-600 sm:hover:bg-blue-700 disabled:opacity-50 sm:disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg sm:rounded-full flex items-center justify-center transition-colors focus:outline-none sm:focus:ring-2 sm:focus:ring-blue-500 sm:focus:ring-offset-2 dark:ring-offset-gray-800`}
+              title="Send message"
             >
               <svg
-                className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90"
+                className="w-5 h-5 text-gray-500 sm:text-white transform rotate-90"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -5244,6 +5237,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 />
               </svg>
             </button>
+
+            {/* Voice Assistant button - Mobile: right-2 (primary), Desktop: right-16 */}
+            <div className={`absolute ${leftHandedMode ? 'left-2 sm:left-16' : 'right-2 sm:right-16'} top-1/2 transform -translate-y-1/2`}>
+              <VoiceAssistantButton
+                onAutoSend={handleVoiceAutoSend}
+                className="w-10 h-10"
+              />
+            </div>
 
             {/* Hint text inside input box at bottom - Desktop only */}
             <div className={`absolute bottom-1 ${leftHandedMode ? 'left-16 right-12' : 'left-12 right-14'} sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
