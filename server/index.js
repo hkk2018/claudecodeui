@@ -1419,6 +1419,65 @@ app.post('/api/voice/transcribe', authenticateToken, async (req, res) => {
     }
 });
 
+// Groq transcribe endpoint
+app.post('/api/groq/transcribe', authenticateToken, async (req, res) => {
+    try {
+        const multer = (await import('multer')).default;
+        const upload = multer({ storage: multer.memoryStorage() });
+
+        upload.single('audio')(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+            if (!req.file) {
+                return res.status(400).json({ error: 'No audio file provided' });
+            }
+
+            try {
+                const groqApiKey = process.env.GROQ_API_KEY;
+                if (!groqApiKey) {
+                    throw new Error('GROQ_API_KEY not configured');
+                }
+
+                const FormData = (await import('form-data')).default;
+                const formData = new FormData();
+
+                formData.append('file', req.file.buffer, {
+                    filename: req.file.originalname || 'audio.webm',
+                    contentType: req.file.mimetype
+                });
+                formData.append('model', 'whisper-large-v3-turbo');
+                formData.append('language', 'zh');
+                formData.append('response_format', 'text');
+
+                const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${groqApiKey}`,
+                        ...formData.getHeaders()
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+                }
+
+                const text = await response.text();
+                res.json({ text: text.trim(), engine: 'Groq Whisper v3 Turbo' });
+
+            } catch (error) {
+                console.error('[Groq] Transcription error:', error);
+                res.status(500).json({ error: error.message });
+            }
+        });
+    } catch (error) {
+        console.error('[Groq] Endpoint error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
