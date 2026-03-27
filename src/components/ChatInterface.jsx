@@ -2200,6 +2200,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Ref to store handleSubmit so we can call it from handleCustomCommand
   const handleSubmitRef = useRef(null);
 
+  // Ref to prevent duplicate submissions
+  const isSubmittingRef = useRef(false);
+
   // Handle custom command execution
   const handleCustomCommand = useCallback(async (result, args) => {
     const { content, hasBashCommands, hasFileIncludes } = result;
@@ -2774,7 +2777,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         } else {
           content = decodeHtmlEntities(String(msg.message.content));
         }
-        
+
         // Skip command messages, system messages, and empty content
         const shouldSkip = !content ||
                           content.startsWith('<command-name>') ||
@@ -4175,7 +4178,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
+
+    // Prevent duplicate submissions
+    if (isSubmittingRef.current) {
+      return;
+    }
+
     if (!input.trim() || currentProcessingState.value.isLoading || !selectedProject) return;
+
+    // Set submitting flag
+    isSubmittingRef.current = true;
 
     // Upload images first if any
     let uploadedImages = [];
@@ -4188,7 +4200,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       try {
         const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-images`, {
           method: 'POST',
-          headers: {}, // Let browser set Content-Type for FormData
           body: formData
         });
         
@@ -4205,6 +4216,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           content: `Failed to upload images: ${error.message}`,
           timestamp: new Date()
         }]);
+        isSubmittingRef.current = false; // Reset flag on error
         return;
       }
     }
@@ -4305,6 +4317,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
+
+    // Reset submitting flag after a short delay to ensure all events are processed
+    setTimeout(() => {
+      isSubmittingRef.current = false;
+    }, 100);
   }, [input, selectedProject, attachedImages, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
@@ -5212,14 +5229,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             <button
               type="submit"
               disabled={!input.trim() || currentProcessingState.value.isLoading}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                handleSubmit(e);
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                handleSubmit(e);
-              }}
               className={`absolute ${leftHandedMode ? 'right-12 sm:left-2' : 'left-12 sm:right-2'} top-1/2 transform -translate-y-1/2 p-2 sm:p-0 sm:w-12 sm:h-12 hover:bg-gray-100 dark:hover:bg-gray-700 sm:bg-blue-600 sm:hover:bg-blue-700 disabled:opacity-50 sm:disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg sm:rounded-full flex items-center justify-center transition-colors focus:outline-none sm:focus:ring-2 sm:focus:ring-blue-500 sm:focus:ring-offset-2 dark:ring-offset-gray-800`}
               title="Send message"
             >
