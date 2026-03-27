@@ -5186,38 +5186,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             frequentCommands={commandQuery ? [] : frequentCommands}
           />
 
-          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+          <div {...getRootProps()} className={`relative flex items-end ${leftHandedMode ? 'flex-row-reverse' : 'flex-row'} bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onClick={handleTextareaClick}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onFocus={() => setIsInputFocused(true)}
-              onBlur={() => setIsInputFocused(false)}
-              onInput={(e) => {
-                // Immediate resize on input for better UX
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
-                setCursorPosition(e.target.selectionStart);
 
-                // Check if textarea is expanded (more than 2 lines worth of height)
-                const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
-                const isExpanded = e.target.scrollHeight > lineHeight * 2;
-                setIsTextareaExpanded(isExpanded);
-              }}
-              placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
-              disabled={currentProcessingState.value.isLoading}
-              className={`chat-input-placeholder block w-full ${leftHandedMode ? 'pl-16 pr-24 sm:pr-12' : 'pl-24 sm:pl-12 pr-20'} sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200`}
-              style={{ height: '50px' }}
-            />
             {/* Image upload button */}
             <button
               type="button"
               onClick={open}
-              className={`absolute ${leftHandedMode ? 'right-2' : 'left-2'} top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors`}
+              className="flex-shrink-0 p-2 sm:p-3 self-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Attach images"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5225,43 +5201,72 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </svg>
             </button>
 
-            {/* Send button - Mobile: small icon next to image, Desktop: large round button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || currentProcessingState.value.isLoading}
-              className={`absolute ${leftHandedMode ? 'right-12 sm:left-2' : 'left-12 sm:right-2'} top-1/2 transform -translate-y-1/2 p-2 sm:p-0 sm:w-12 sm:h-12 hover:bg-gray-100 dark:hover:bg-gray-700 sm:bg-blue-600 sm:hover:bg-blue-700 disabled:opacity-50 sm:disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg sm:rounded-full flex items-center justify-center transition-colors focus:outline-none sm:focus:ring-2 sm:focus:ring-blue-500 sm:focus:ring-offset-2 dark:ring-offset-gray-800`}
-              title="Send message"
-            >
-              <svg
-                className="w-5 h-5 text-gray-500 sm:text-white transform rotate-90"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                />
-              </svg>
-            </button>
+            {/* Textarea wrapper for hint text positioning */}
+            <div className="relative flex-1 min-w-0">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleInputChange}
+                onClick={handleTextareaClick}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
+                onInput={(e) => {
+                  // Immediate resize on input for better UX
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                  setCursorPosition(e.target.selectionStart);
 
-            {/* Voice Assistant button - Mobile: right-2 (primary), Desktop: right-16 */}
-            <div className={`absolute ${leftHandedMode ? 'left-2 sm:left-16' : 'right-2 sm:right-16'} top-1/2 transform -translate-y-1/2`}>
+                  // Check if textarea is expanded (more than 2 lines worth of height)
+                  const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
+                  const isExpanded = e.target.scrollHeight > lineHeight * 2;
+                  setIsTextareaExpanded(isExpanded);
+                }}
+                placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
+                disabled={currentProcessingState.value.isLoading}
+                className="chat-input-placeholder block w-full px-2 py-1.5 sm:py-4 bg-transparent focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+                style={{ height: '50px' }}
+              />
+              {/* Hint text inside input box at bottom - Desktop only */}
+              <div className={`absolute bottom-1 left-2 right-2 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
+                input.trim() ? 'opacity-0' : 'opacity-100'
+              }`}>
+                {sendByCtrlEnter
+                  ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+                  : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
+              </div>
+            </div>
+
+            {/* Action buttons group - Send + Voice */}
+            <div className={`flex-shrink-0 flex ${leftHandedMode ? 'flex-row-reverse' : 'flex-row'} items-center gap-1 px-1 sm:px-2 self-center`}>
+              {/* Send button */}
+              <button
+                type="submit"
+                disabled={!input.trim() || currentProcessingState.value.isLoading}
+                className="p-2 sm:p-0 sm:w-12 sm:h-12 hover:bg-gray-100 dark:hover:bg-gray-700 sm:bg-blue-600 sm:hover:bg-blue-700 disabled:opacity-50 sm:disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg sm:rounded-full flex items-center justify-center transition-colors focus:outline-none sm:focus:ring-2 sm:focus:ring-blue-500 sm:focus:ring-offset-2 dark:ring-offset-gray-800"
+                title="Send message"
+              >
+                <svg
+                  className="w-5 h-5 text-gray-500 sm:text-white transform rotate-90"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  />
+                </svg>
+              </button>
+
+              {/* Voice Assistant button */}
               <VoiceAssistantButton
                 onAutoSend={handleVoiceAutoSend}
                 className="w-10 h-10"
               />
-            </div>
-
-            {/* Hint text inside input box at bottom - Desktop only */}
-            <div className={`absolute bottom-1 ${leftHandedMode ? 'left-16 right-12' : 'left-12 right-14'} sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
-              input.trim() ? 'opacity-0' : 'opacity-100'
-            }`}>
-              {sendByCtrlEnter
-                ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
-                : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
             </div>
           </div>
         </form>
