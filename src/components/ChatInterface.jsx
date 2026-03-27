@@ -432,10 +432,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 {message.images.map((img, idx) => (
                   <img
                     key={idx}
-                    src={img.data}
+                    src={img.url || img.data}
                     alt={img.name}
                     className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => window.open(img.data, '_blank')}
+                    onClick={() => window.open(img.url || img.data, '_blank')}
                   />
                 ))}
               </div>

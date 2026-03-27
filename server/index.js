@@ -1528,22 +1528,25 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             }
 
             try {
-                // Process uploaded images
+                // Process uploaded images - keep files on disk and return metadata with URLs
                 const processedImages = await Promise.all(
                     req.files.map(async (file) => {
-                        // Read file and convert to base64
+                        // Read file and convert to base64 (for immediate use by SDK)
                         const buffer = await fs.readFile(file.path);
                         const base64 = buffer.toString('base64');
                         const mimeType = file.mimetype;
 
-                        // Clean up temp file immediately
-                        await fs.unlink(file.path);
+                        // Generate relative path for the image (userId/filename)
+                        const relativePath = `${req.user.id}/${file.filename}`;
+                        const url = `/api/images/${relativePath}`;
 
                         return {
                             name: file.originalname,
-                            data: `data:${mimeType};base64,${base64}`,
+                            data: `data:${mimeType};base64,${base64}`,  // For immediate SDK use
                             size: file.size,
-                            mimeType: mimeType
+                            mimeType: mimeType,
+                            url: url,  // For long-term storage and display
+                            path: file.path  // Absolute path on disk
                         };
                     })
                 );
@@ -1558,6 +1561,61 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
         });
     } catch (error) {
         console.error('Error in image upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Serve uploaded images
+app.get('/api/images/:userId/:filename', authenticateToken, async (req, res) => {
+    try {
+        const path = (await import('path')).default;
+        const fs = (await import('fs')).promises;
+        const os = (await import('os')).default;
+
+        const { userId, filename } = req.params;
+
+        // Security: ensure user can only access their own images
+        if (String(req.user.id) !== userId) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        // Security: prevent path traversal
+        if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            return res.status(400).json({ error: 'Invalid filename' });
+        }
+
+        const imagePath = path.join(os.tmpdir(), 'claude-ui-uploads', userId, filename);
+
+        // Check if file exists
+        try {
+            await fs.access(imagePath);
+        } catch {
+            return res.status(404).json({ error: 'Image not found' });
+        }
+
+        // Determine content type from file extension
+        const ext = path.extname(filename).toLowerCase();
+        const contentTypeMap = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.svg': 'image/svg+xml'
+        };
+        const contentType = contentTypeMap[ext] || 'application/octet-stream';
+
+        // Set cache headers (images are immutable by filename)
+        res.set({
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+
+        // Stream the file
+        const stream = (await import('fs')).createReadStream(imagePath);
+        stream.pipe(res);
+    } catch (error) {
+        console.error('Error serving image:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
