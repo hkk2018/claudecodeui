@@ -538,7 +538,14 @@ async function getProjects() {
           };
         }
 
-        projects.push(project);
+        // Only add projects that have at least one session (Claude or Cursor)
+        // This filters out empty project folders with only ghost sessions
+        const hasAnySessions = (project.sessions && project.sessions.length > 0) ||
+                               (project.cursorSessions && project.cursorSessions.length > 0);
+
+        if (hasAnySessions) {
+          projects.push(project);
+        }
 
         // Progress log every 5 projects
         if ((i + 1) % 5 === 0) {
@@ -613,8 +620,14 @@ async function getProjects() {
           error: error.message
         };
       }
-      
-      projects.push(project);
+
+      // Only add manual projects that have at least one session
+      const hasAnySessions = (project.sessions && project.sessions.length > 0) ||
+                             (project.cursorSessions && project.cursorSessions.length > 0);
+
+      if (hasAnySessions) {
+        projects.push(project);
+      }
     }
   }
 
@@ -967,16 +980,22 @@ async function parseJsonlSessions(filePath) {
       }
     }
 
-    // Filter out sessions that contain JSON responses (Task Master errors)
+    // Filter out ghost sessions and invalid sessions
     const allSessions = Array.from(sessions.values());
     const filteredSessions = allSessions.filter(session => {
-      const shouldFilter = session.summary.startsWith('{ "');
-      if (shouldFilter) {
+      // Filter out Task Master JSON responses
+      if (session.summary.startsWith('{ "')) {
+        return false;
       }
-      // Log a sample of summaries to debug
-      if (Math.random() < 0.01) { // Log 1% of sessions
+
+      // Filter out ghost sessions (only Warmup, no real user/assistant messages)
+      // Ghost sessions are created by Web UI remote-control or repeated CLI warmups
+      // See: https://github.com/anthropics/claude-code/issues/29205
+      if (!session.lastUserMessage && !session.lastAssistantMessage) {
+        return false;
       }
-      return !shouldFilter;
+
+      return true;
     });
 
 
