@@ -1910,7 +1910,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       if (savedMode) {
         setPermissionMode(savedMode);
       } else {
-        setPermissionMode('default');
+        setPermissionMode(localStorage.getItem('defaultPermissionMode') || 'default');
       }
     }
   }, [selectedSession?.id]);

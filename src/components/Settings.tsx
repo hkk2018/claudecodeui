@@ -22,6 +22,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
+  const [defaultPermissionMode, setDefaultPermissionMode] = useState(() => localStorage.getItem('defaultPermissionMode') || 'default');
 
   const [mcpServers, setMcpServers] = useState([]);
   const [showMcpForm, setShowMcpForm] = useState(false);
@@ -978,6 +979,35 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
               } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
             />
           </button>
+        </div>
+      </div>
+    </div>
+
+    {/* Default Permission Mode */}
+    <div className="space-y-4">
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Default Permission Mode
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Permission mode for new sessions (existing sessions keep their own)
+            </div>
+          </div>
+          <select
+            value={defaultPermissionMode}
+            onChange={(e) => {
+              setDefaultPermissionMode(e.target.value);
+              localStorage.setItem('defaultPermissionMode', e.target.value);
+            }}
+            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-44"
+          >
+            <option value="default">Default Mode</option>
+            <option value="acceptEdits">Accept Edits</option>
+            <option value="bypassPermissions">Bypass Permissions</option>
+            <option value="plan">Plan Mode</option>
+          </select>
         </div>
       </div>
     </div>
