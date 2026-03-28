@@ -132,22 +132,43 @@ function resolvePermissionRequest(requestId, response) {
 }
 
 /**
- * Cleans up timed-out permission requests
- * @param {number} timeoutMs - Timeout in milliseconds (default 5 minutes)
+ * Cleans up all pending permission requests for a specific session
+ * Called when a query completes or errors out
+ * @param {string} sessionId - Session ID to clean up
  */
-function cleanupTimedOutPermissions(timeoutMs = 300000) {
-  const now = Date.now();
+function cleanupSessionPermissions(sessionId: string) {
+  if (!sessionId) return;
   for (const [requestId, request] of pendingPermissionRequests.entries()) {
-    if (now - request.timestamp > timeoutMs) {
-      console.log(`⏰ Permission request ${requestId} timed out`);
-      request.resolve({
-        behavior: 'deny',
-        message: 'Permission request timed out',
-        interrupt: false
-      });
+    if (request.sessionId === sessionId) {
+      console.log(`🧹 Cleaning up permission request ${requestId} for ended session ${sessionId}`);
       pendingPermissionRequests.delete(requestId);
     }
   }
+}
+
+/**
+ * Gets pending permission requests for a specific session
+ * @param {string} sessionId - Session ID to query
+ * @returns {Array<Object>} Array of pending permission request objects
+ */
+function getPendingPermissionsBySession(sessionId: string) {
+  const now = Date.now();
+  const permissions = [];
+  for (const [requestId, request] of pendingPermissionRequests.entries()) {
+    if (request.sessionId === sessionId) {
+      permissions.push({
+        requestId,
+        sessionId: request.sessionId,
+        toolName: request.toolName,
+        toolUseID: request.toolUseID,
+        toolInput: request.input,
+        suggestions: request.suggestions || [],
+        timestamp: request.timestamp,
+        waitingTimeMs: now - request.timestamp
+      });
+    }
+  }
+  return permissions;
 }
 
 /**
@@ -492,6 +513,7 @@ function createCanUseTool(ws, sessionId: string) {
     const responsePromise = new Promise((resolve, reject) => {
       // Register the pending request
       registerPermissionRequest(requestId, { resolve, reject }, {
+        sessionId,
         toolName,
         input,
         suggestions,
@@ -652,6 +674,7 @@ async function queryClaudeSDK(command, options: any = {}, ws) {
     // Clean up session on completion
     if (capturedSessionId) {
       removeSession(capturedSessionId);
+      cleanupSessionPermissions(capturedSessionId);
     }
 
     // Clean up temporary image files
@@ -673,6 +696,7 @@ async function queryClaudeSDK(command, options: any = {}, ws) {
     // Clean up session on error
     if (capturedSessionId) {
       removeSession(capturedSessionId);
+      cleanupSessionPermissions(capturedSessionId);
     }
 
     // Clean up temporary image files on error
@@ -847,7 +871,8 @@ export {
   getActiveClaudeSDKSessions,
   getSessionInfo,
   resolvePermissionRequest,
-  cleanupTimedOutPermissions,
+  cleanupSessionPermissions,
+  getPendingPermissionsBySession,
   getAllSessionsStatus,
   getAllPendingPermissions,
   getDebugInfo,

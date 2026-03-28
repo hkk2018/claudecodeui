@@ -1915,6 +1915,42 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedSession?.id]);
 
+  // Fetch pending permission requests from server when switching sessions
+  useEffect(() => {
+    if (!selectedSession?.id) return;
+    authenticatedFetch(`/api/sessions/${selectedSession.id}/pending-permissions`)
+      .then(res => res.json())
+      .then(permissions => {
+        if (permissions.length > 0) {
+          setChatMessages(prev => {
+            // Avoid duplicates by checking requestId
+            const existingIds = new Set(prev.filter(m => m.isPermissionRequest).map(m => m.permissionData?.requestId));
+            const newPermissions = permissions
+              .filter(p => !existingIds.has(p.requestId))
+              .map(p => ({
+                type: 'assistant',
+                content: '',
+                timestamp: new Date(p.timestamp),
+                isPermissionRequest: true,
+                permissionData: {
+                  requestId: p.requestId,
+                  sessionId: p.sessionId,
+                  toolName: p.toolName,
+                  toolInput: p.toolInput,
+                  toolUseID: p.toolUseID,
+                  suggestions: p.suggestions || []
+                }
+              }));
+            if (newPermissions.length > 0) {
+              return [...prev, ...newPermissions];
+            }
+            return prev;
+          });
+        }
+      })
+      .catch(err => console.warn('Failed to fetch pending permissions:', err));
+  }, [selectedSession?.id]);
+
   // When selecting a session from Sidebar, auto-switch provider to match session's origin
   useEffect(() => {
     if (selectedSession && selectedSession.__provider && selectedSession.__provider !== provider) {
