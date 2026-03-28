@@ -97,28 +97,28 @@ router.post('/cli/add', async (req, res) => {
     console.log('🔧 Running Claude CLI command:', 'claude', cliArgs.join(' '));
     
     // For local scope, we need to run the command in the project directory
-    const spawnOptions = {
+    const spawnOptions: any = {
       stdio: ['pipe', 'pipe', 'pipe']
     };
-    
+
     if (scope === 'local' && projectPath) {
       spawnOptions.cwd = projectPath;
       console.log('📁 Running in project directory:', projectPath);
     }
-    
+
     const process = spawn('claude', cliArgs, spawnOptions);
     
     let stdout = '';
     let stderr = '';
-    
-    process.stdout.on('data', (data) => {
+
+    process.stdout?.on('data', (data) => {
       stdout += data.toString();
     });
-    
-    process.stderr.on('data', (data) => {
+
+    process.stderr?.on('data', (data) => {
       stderr += data.toString();
     });
-    
+
     process.on('close', (code) => {
       if (code === 0) {
         res.json({ success: true, output: stdout, message: `MCP server "${name}" added successfully` });
@@ -190,28 +190,28 @@ router.post('/cli/add-json', async (req, res) => {
     console.log('🔧 Running Claude CLI command:', 'claude', cliArgs[0], cliArgs[1], cliArgs[2], cliArgs[3], cliArgs[4], jsonString);
     
     // For local scope, we need to run the command in the project directory
-    const spawnOptions = {
+    const spawnOptions: any = {
       stdio: ['pipe', 'pipe', 'pipe']
     };
-    
+
     if (scope === 'local' && projectPath) {
       spawnOptions.cwd = projectPath;
       console.log('📁 Running in project directory:', projectPath);
     }
-    
+
     const process = spawn('claude', cliArgs, spawnOptions);
     
     let stdout = '';
     let stderr = '';
-    
-    process.stdout.on('data', (data) => {
+
+    process.stdout?.on('data', (data) => {
       stdout += data.toString();
     });
-    
-    process.stderr.on('data', (data) => {
+
+    process.stderr?.on('data', (data) => {
       stderr += data.toString();
     });
-    
+
     process.on('close', (code) => {
       if (code === 0) {
         res.json({ success: true, output: stdout, message: `MCP server "${name}" added successfully via JSON` });
@@ -386,8 +386,8 @@ router.get('/config/read', async (req, res) => {
     // Check for user-scoped MCP servers (at root level)
     if (configData.mcpServers && typeof configData.mcpServers === 'object' && Object.keys(configData.mcpServers).length > 0) {
       console.log('🔍 Found user-scoped MCP servers:', Object.keys(configData.mcpServers));
-      for (const [name, config] of Object.entries(configData.mcpServers)) {
-        const server = {
+      for (const [name, config] of Object.entries(configData.mcpServers) as [string, any][]) {
+        const server: any = {
           id: name,
           name: name,
           type: 'stdio', // Default type
@@ -395,7 +395,7 @@ router.get('/config/read', async (req, res) => {
           config: {},
           raw: config // Include raw config for full details
         };
-        
+
         // Determine transport type and extract config
         if (config.command) {
           server.type = 'stdio';
@@ -420,8 +420,8 @@ router.get('/config/read', async (req, res) => {
       const projectConfig = configData.projects[currentProjectPath];
       if (projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object' && Object.keys(projectConfig.mcpServers).length > 0) {
         console.log(`🔍 Found local-scoped MCP servers for ${currentProjectPath}:`, Object.keys(projectConfig.mcpServers));
-        for (const [name, config] of Object.entries(projectConfig.mcpServers)) {
-          const server = {
+        for (const [name, config] of Object.entries(projectConfig.mcpServers) as [string, any][]) {
+          const server: any = {
             id: `local:${name}`,  // Prefix with scope for uniqueness
             name: name,           // Keep original name
             type: 'stdio', // Default type
@@ -430,7 +430,7 @@ router.get('/config/read', async (req, res) => {
             config: {},
             raw: config // Include raw config for full details
           };
-          
+
           // Determine transport type and extract config
           if (config.command) {
             server.type = 'stdio';
@@ -528,7 +528,7 @@ function parseClaudeGetOutput(output) {
     }
     
     // Otherwise, parse as text
-    const server = { raw_output: output };
+    const server: any = { raw_output: output };
     const lines = output.split('\n');
     
     for (const line of lines) {

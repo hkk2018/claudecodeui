@@ -9,7 +9,7 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeCursorProcesses = new Map(); // Track active processes by session ID
 
-async function spawnCursor(command, options = {}, ws) {
+async function spawnCursor(command, options: any = {}, ws) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -213,7 +213,7 @@ async function spawnCursor(command, options = {}, ws) {
       }));
       
       if (code === 0) {
-        resolve();
+        resolve(undefined);
       } else {
         reject(new Error(`Cursor CLI exited with code ${code}`));
       }

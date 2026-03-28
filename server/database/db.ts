@@ -57,8 +57,8 @@ console.log('');
 
 const runMigrations = () => {
   try {
-    const tableInfo = db.prepare("PRAGMA table_info(users)").all();
-    const columnNames = tableInfo.map(col => col.name);
+    const tableInfo = db.prepare("PRAGMA table_info(users)").all() as any[];
+    const columnNames = tableInfo.map((col: any) => col.name);
 
     if (!columnNames.includes('git_name')) {
       console.log('Running migration: Adding git_name column');
@@ -100,7 +100,7 @@ const userDb = {
   // Check if any users exist
   hasUsers: () => {
     try {
-      const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
+      const row = db.prepare('SELECT COUNT(*) as count FROM users').get() as any;
       return row.count > 0;
     } catch (err) {
       throw err;
@@ -185,7 +185,7 @@ const userDb = {
 
   hasCompletedOnboarding: (userId) => {
     try {
-      const row = db.prepare('SELECT has_completed_onboarding FROM users WHERE id = ?').get(userId);
+      const row = db.prepare('SELECT has_completed_onboarding FROM users WHERE id = ?').get(userId) as any;
       return row?.has_completed_onboarding === 1;
     } catch (err) {
       throw err;
@@ -230,7 +230,7 @@ const apiKeysDb = {
         FROM api_keys ak
         JOIN users u ON ak.user_id = u.id
         WHERE ak.api_key = ? AND ak.is_active = 1 AND u.is_active = 1
-      `).get(apiKey);
+      `).get(apiKey) as any;
 
       if (row) {
         // Update last_used timestamp
@@ -302,7 +302,7 @@ const credentialsDb = {
   // Get active credential value for a user by type (returns most recent active)
   getActiveCredential: (userId, credentialType) => {
     try {
-      const row = db.prepare('SELECT credential_value FROM user_credentials WHERE user_id = ? AND credential_type = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1').get(userId, credentialType);
+      const row = db.prepare('SELECT credential_value FROM user_credentials WHERE user_id = ? AND credential_type = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1').get(userId, credentialType) as any;
       return row?.credential_value || null;
     } catch (err) {
       throw err;

@@ -3,13 +3,13 @@
   "version": "1.12.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
-  "main": "server/index.ts",
+  "main": "dist-server/index.js",
   "bin": {
-    "claude-code-ui": "server/cli.ts",
-    "cloudcli": "server/cli.ts"
+    "claude-code-ui": "dist-server/cli.js",
+    "cloudcli": "dist-server/cli.js"
   },
   "files": [
-    "server/",
+    "dist-server/",
     "dist/",
     "README.md"
   ],
@@ -22,12 +22,15 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
-    "server": "tsx server/index.ts",
+    "dev": "concurrently --kill-others \"pnpm run server\" \"pnpm run client\"",
+    "server": "node dist-server/index.js",
+    "server:dev": "tsx server/index.ts",
     "client": "vite --host",
-    "build": "vite build",
+    "build": "vite build && tsc -p tsconfig.server.json && cp server/database/init.sql dist-server/database/",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json && cp server/database/init.sql dist-server/database/",
     "preview": "vite preview",
-    "start": "npm run build && npm run server",
+    "start": "pnpm run build && pnpm run server",
     "release": "./release.sh",
     "type-check": "tsc --noEmit"
   },
@@ -123,7 +126,6 @@
     "vite": "^6.0.9"
   },
   "pnpm": {
-    "onlyBuiltDependenciesFile": "",
     "onlyBuiltDependencies": [
       "bcrypt",
       "better-sqlite3",

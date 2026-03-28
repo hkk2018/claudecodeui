@@ -10,9 +10,9 @@ const router = express.Router();
 // Get all API keys for the authenticated user
 router.get('/api-keys', async (req, res) => {
   try {
-    const apiKeys = apiKeysDb.getApiKeys(req.user.id);
+    const apiKeys = apiKeysDb.getApiKeys((req as any).user.id) as any[];
     // Don't send the full API key in the list for security
-    const sanitizedKeys = apiKeys.map(key => ({
+    const sanitizedKeys = apiKeys.map((key: any) => ({
       ...key,
       api_key: key.api_key.substring(0, 10) + '...'
     }));
@@ -32,7 +32,7 @@ router.post('/api-keys', async (req, res) => {
       return res.status(400).json({ error: 'Key name is required' });
     }
 
-    const result = apiKeysDb.createApiKey(req.user.id, keyName.trim());
+    const result = apiKeysDb.createApiKey((req as any).user.id, keyName.trim());
     res.json({
       success: true,
       apiKey: result
@@ -47,7 +47,7 @@ router.post('/api-keys', async (req, res) => {
 router.delete('/api-keys/:keyId', async (req, res) => {
   try {
     const { keyId } = req.params;
-    const success = apiKeysDb.deleteApiKey(req.user.id, parseInt(keyId));
+    const success = apiKeysDb.deleteApiKey((req as any).user.id, parseInt(keyId));
 
     if (success) {
       res.json({ success: true });
@@ -70,7 +70,7 @@ router.patch('/api-keys/:keyId/toggle', async (req, res) => {
       return res.status(400).json({ error: 'isActive must be a boolean' });
     }
 
-    const success = apiKeysDb.toggleApiKey(req.user.id, parseInt(keyId), isActive);
+    const success = apiKeysDb.toggleApiKey((req as any).user.id, parseInt(keyId), isActive);
 
     if (success) {
       res.json({ success: true });
@@ -91,7 +91,7 @@ router.patch('/api-keys/:keyId/toggle', async (req, res) => {
 router.get('/credentials', async (req, res) => {
   try {
     const { type } = req.query;
-    const credentials = credentialsDb.getCredentials(req.user.id, type || null);
+    const credentials = credentialsDb.getCredentials((req as any).user.id, (type as string) || null);
     // Don't send the actual credential values for security
     res.json({ credentials });
   } catch (error) {
@@ -118,7 +118,7 @@ router.post('/credentials', async (req, res) => {
     }
 
     const result = credentialsDb.createCredential(
-      req.user.id,
+      (req as any).user.id,
       credentialName.trim(),
       credentialType.trim(),
       credentialValue.trim(),
@@ -139,7 +139,7 @@ router.post('/credentials', async (req, res) => {
 router.delete('/credentials/:credentialId', async (req, res) => {
   try {
     const { credentialId } = req.params;
-    const success = credentialsDb.deleteCredential(req.user.id, parseInt(credentialId));
+    const success = credentialsDb.deleteCredential((req as any).user.id, parseInt(credentialId));
 
     if (success) {
       res.json({ success: true });
@@ -162,7 +162,7 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
       return res.status(400).json({ error: 'isActive must be a boolean' });
     }
 
-    const success = credentialsDb.toggleCredential(req.user.id, parseInt(credentialId), isActive);
+    const success = credentialsDb.toggleCredential((req as any).user.id, parseInt(credentialId), isActive);
 
     if (success) {
       res.json({ success: true });

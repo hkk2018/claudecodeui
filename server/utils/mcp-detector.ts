@@ -51,12 +51,12 @@ export async function detectTaskMasterMCPServer() {
         // Look for task-master-ai in user-scoped MCP servers
         let taskMasterServer = null;
         if (configData.mcpServers && typeof configData.mcpServers === 'object') {
-            const serverEntry = Object.entries(configData.mcpServers).find(([name, config]) => 
-                name === 'task-master-ai' || 
+            const serverEntry = (Object.entries(configData.mcpServers) as [string, any][]).find(([name, config]) =>
+                name === 'task-master-ai' ||
                 name.includes('task-master') ||
                 (config && config.command && config.command.includes('task-master'))
             );
-            
+
             if (serverEntry) {
                 const [name, config] = serverEntry;
                 taskMasterServer = {
@@ -70,10 +70,10 @@ export async function detectTaskMasterMCPServer() {
 
         // Also check project-specific MCP servers if not found globally
         if (!taskMasterServer && configData.projects) {
-            for (const [projectPath, projectConfig] of Object.entries(configData.projects)) {
+            for (const [projectPath, projectConfig] of Object.entries(configData.projects) as [string, any][]) {
                 if (projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
-                    const serverEntry = Object.entries(projectConfig.mcpServers).find(([name, config]) => 
-                        name === 'task-master-ai' || 
+                    const serverEntry = (Object.entries(projectConfig.mcpServers) as [string, any][]).find(([name, config]) =>
+                        name === 'task-master-ai' ||
                         name.includes('task-master') ||
                         (config && config.command && config.command.includes('task-master'))
                     );
@@ -120,9 +120,9 @@ export async function detectTaskMasterMCPServer() {
                 availableServers.push(...Object.keys(configData.mcpServers));
             }
             if (configData.projects) {
-                for (const projectConfig of Object.values(configData.projects)) {
+                for (const projectConfig of Object.values(configData.projects) as any[]) {
                     if (projectConfig.mcpServers) {
-                        availableServers.push(...Object.keys(projectConfig.mcpServers).map(name => `local:${name}`));
+                        availableServers.push(...Object.keys(projectConfig.mcpServers).map((name: string) => `local:${name}`));
                     }
                 }
             }

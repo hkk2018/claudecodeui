@@ -59,7 +59,7 @@ function addDebugMessage(entry) {
  * @param {Object} options - Filter options { limit, offset, sessionId, type }
  * @returns {Object} { messages, total }
  */
-function getDebugMessages(options = {}) {
+function getDebugMessages(options: any = {}) {
   const { limit = 50, offset = 0, sessionId, type } = options;
 
   let filtered = [...debugMessageLog];
@@ -155,10 +155,10 @@ function cleanupTimedOutPermissions(timeoutMs = 300000) {
  * @param {Object} options - CLI options
  * @returns {Object} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+function mapCliOptionsToSDK(options: any = {}) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
-  const sdkOptions = {};
+  const sdkOptions: any = {};
 
   // Map working directory
   if (cwd) {
@@ -543,7 +543,7 @@ function createCanUseTool(ws) {
  * @param {Object} ws - WebSocket connection
  * @returns {Promise<void>}
  */
-async function queryClaudeSDK(command, options = {}, ws) {
+async function queryClaudeSDK(command, options: any = {}, ws) {
   const { sessionId } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
@@ -574,7 +574,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       prompt: finalCommand,
       options: {
         ...sdkOptions,
-        canUseTool
+        canUseTool: canUseTool as any
       }
     });
 

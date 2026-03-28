@@ -235,7 +235,7 @@ router.post('/create-workspace', async (req, res) => {
         // Get GitHub token if needed
         if (githubTokenId) {
           // Fetch token from database
-          const token = await getGithubTokenById(githubTokenId, req.user.id);
+          const token = await getGithubTokenById(githubTokenId, (req as any).user?.id);
           if (!token) {
             // Clean up created directory
             await fs.rm(absolutePath, { recursive: true, force: true });
@@ -286,13 +286,11 @@ router.post('/create-workspace', async (req, res) => {
  * Helper function to get GitHub token from database
  */
 async function getGithubTokenById(tokenId, userId) {
-  const { getDatabase } = await import('../database/db.js');
-  const db = await getDatabase();
+  const { db } = await import('../database/db.js');
 
-  const credential = await db.get(
-    'SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1',
-    [tokenId, userId, 'github_token']
-  );
+  const credential = db.prepare(
+    'SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1'
+  ).get(tokenId, userId, 'github_token') as any;
 
   // Return in the expected format (github_token field for compatibility)
   if (credential) {
@@ -365,7 +363,7 @@ function cloneGitHubRepository(githubUrl, destinationPath, githubToken = null) {
       }
     });
 
-    gitProcess.on('error', (error) => {
+    gitProcess.on('error', (error: any) => {
       if (error.code === 'ENOENT') {
         reject(new Error('Git is not installed or not in PATH'));
       } else {

@@ -10,12 +10,12 @@ const router = express.Router();
 
 router.get('/git-config', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    let gitConfig = userDb.getGitConfig(userId);
+    const userId = (req as any).user.id;
+    let gitConfig = userDb.getGitConfig(userId) as any;
 
     // If database is empty, try to get from system git config
     if (!gitConfig || (!gitConfig.git_name && !gitConfig.git_email)) {
-      const systemConfig = await getSystemGitConfig();
+      const systemConfig = await getSystemGitConfig() as any;
 
       // If system has values, save them to database for this user
       if (systemConfig.git_name || systemConfig.git_email) {
@@ -39,7 +39,7 @@ router.get('/git-config', authenticateToken, async (req, res) => {
 // Apply git config globally via git config --global
 router.post('/git-config', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req as any).user.id;
     const { gitName, gitEmail } = req.body;
 
     if (!gitName || !gitEmail) {
@@ -75,7 +75,7 @@ router.post('/git-config', authenticateToken, async (req, res) => {
 
 router.post('/complete-onboarding', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req as any).user.id;
     userDb.completeOnboarding(userId);
 
     res.json({
@@ -90,7 +90,7 @@ router.post('/complete-onboarding', authenticateToken, async (req, res) => {
 
 router.get('/onboarding-status', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req as any).user.id;
     const hasCompleted = userDb.hasCompletedOnboarding(userId);
 
     res.json({

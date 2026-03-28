@@ -193,8 +193,8 @@ function validateBranchName(branchName) {
  * @param {number} limit - Number of commits to retrieve (default: 5)
  * @returns {Promise<string[]>} - Array of commit messages
  */
-async function getCommitMessages(projectPath, limit = 5) {
-  return new Promise((resolve, reject) => {
+async function getCommitMessages(projectPath, limit = 5): Promise<string[]> {
+  return new Promise<string[]>((resolve, reject) => {
     const gitProcess = spawn('git', ['log', `-${limit}`, '--pretty=format:%s'], {
       cwd: projectPath,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -419,6 +419,8 @@ async function cleanupProject(projectPath, sessionId = null) {
  * SSE Stream Writer - Adapts SDK/CLI output to Server-Sent Events
  */
 class SSEStreamWriter {
+  res: any;
+  sessionId: any;
   constructor(res) {
     this.res = res;
     this.sessionId = null;
@@ -453,6 +455,8 @@ class SSEStreamWriter {
  * Non-streaming response collector
  */
 class ResponseCollector {
+  messages: any[];
+  sessionId: any;
   constructor() {
     this.messages = [];
     this.sessionId = null;
@@ -836,7 +840,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     // Determine the final project path
     if (githubUrl) {
       // Clone repository (to projectPath if provided, otherwise generate path)
-      const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+      const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken((req as any).user?.id);
 
       let targetPath;
       if (projectPath) {
@@ -935,7 +939,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         console.log('🔄 Starting GitHub branch/PR creation workflow...');
 
         // Get GitHub token
-        const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+        const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken((req as any).user?.id);
 
         if (!tokenToUse) {
           throw new Error('GitHub token required for branch/PR creation. Please configure a GitHub token in settings.');
@@ -985,7 +989,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
             stdio: 'pipe'
           });
 
-          await new Promise((resolve, reject) => {
+          await new Promise<void>((resolve, reject) => {
             let stderr = '';
             checkoutProcess.stderr.on('data', (data) => { stderr += data.toString(); });
             checkoutProcess.on('close', (code) => {
@@ -1022,7 +1026,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
             stdio: 'pipe'
           });
 
-          await new Promise((resolve, reject) => {
+          await new Promise<void>((resolve, reject) => {
             let stderr = '';
             let stdout = '';
             pushProcess.stdout.on('data', (data) => { stdout += data.toString(); });
@@ -1116,7 +1120,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       const assistantMessages = writer.getAssistantMessages();
       const tokenSummary = writer.getTotalTokens();
 
-      const response = {
+      const response: any = {
         success: true,
         sessionId: writer.getSessionId(),
         messages: assistantMessages,

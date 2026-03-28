@@ -60,7 +60,7 @@ router.post('/config', async (req, res) => {
     const configPath = path.join(os.homedir(), '.cursor', 'cli-config.json');
     
     // Read existing config or create default
-    let config = {
+    let config: any = {
       version: 1,
       editor: {
         vimMode: false
@@ -128,8 +128,8 @@ router.get('/mcp', async (req, res) => {
       // Convert to UI-friendly format
       const servers = [];
       if (mcpConfig.mcpServers && typeof mcpConfig.mcpServers === 'object') {
-        for (const [name, config] of Object.entries(mcpConfig.mcpServers)) {
-          const server = {
+        for (const [name, config] of Object.entries(mcpConfig.mcpServers) as [string, any][]) {
+          const server: any = {
             id: name,
             name: name,
             type: 'stdio',
@@ -137,7 +137,7 @@ router.get('/mcp', async (req, res) => {
             config: {},
             raw: config
           };
-          
+
           // Determine transport type and extract config
           if (config.command) {
             server.type = 'stdio';
@@ -348,10 +348,10 @@ router.get('/sessions', async (req, res) => {
     const { projectPath } = req.query;
     
     // Calculate cwdID hash for the project path (Cursor uses MD5 hash)
-    const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
+    const cwdId = crypto.createHash('md5').update((projectPath as string) || process.cwd()).digest('hex');
     const cursorChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
-    
-    
+
+
     // Check if the directory exists
     try {
       await fs.access(cursorChatsPath);
@@ -396,7 +396,7 @@ router.get('/sessions', async (req, res) => {
           SELECT key, value FROM meta
         `);
         
-        let sessionData = {
+        let sessionData: any = {
           id: sessionId,
           name: 'Untitled Session',
           createdAt: null,
@@ -556,7 +556,7 @@ router.get('/sessions', async (req, res) => {
     sessions.sort((a, b) => {
       if (!a.createdAt) return 1;
       if (!b.createdAt) return -1;
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      return (new Date(b.createdAt) as any) - (new Date(a.createdAt) as any);
     });
     
     res.json({ 
@@ -582,7 +582,7 @@ router.get('/sessions/:sessionId', async (req, res) => {
     const { projectPath } = req.query;
     
     // Calculate cwdID hash for the project path
-    const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
+    const cwdId = crypto.createHash('md5').update((projectPath as string) || process.cwd()).digest('hex');
     const storeDbPath = path.join(os.homedir(), '.cursor', 'chats', cwdId, sessionId, 'store.db');
     
     

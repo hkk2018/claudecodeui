@@ -29,7 +29,7 @@ const router = express.Router();
  * Check if TaskMaster CLI is installed globally
  * @returns {Promise<Object>} Installation status result
  */
-async function checkTaskMasterInstallation() {
+async function checkTaskMasterInstallation(): Promise<any> {
     return new Promise((resolve) => {
         // Check if task-master command is available
         const child = spawn('which', ['task-master'], { 
@@ -165,7 +165,7 @@ async function detectTaskMasterFolder(projectPath) {
                     tasks = tasksData.tasks;
                 } else {
                     // Tagged format - get tasks from all tags
-                    Object.values(tasksData).forEach(tagData => {
+                    Object.values(tasksData).forEach((tagData: any) => {
                         if (tagData.tasks) {
                             tasks = tasks.concat(tagData.tasks);
                         }
@@ -492,7 +492,7 @@ router.get('/next/:projectName', async (req, res) => {
                 stderr += data.toString();
             });
 
-            await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 nextTaskCommand.on('close', (code) => {
                     if (code === 0) {
                         resolve();
@@ -536,8 +536,8 @@ router.get('/next/:projectName', async (req, res) => {
             });
 
             if (tasksResponse.ok) {
-                const tasksData = await tasksResponse.json();
-                const nextTask = tasksData.tasks?.find(task => 
+                const tasksData = await tasksResponse.json() as any;
+                const nextTask = tasksData.tasks?.find((task: any) =>
                     task.status === 'pending' || task.status === 'in-progress'
                 ) || null;
 
@@ -733,7 +733,7 @@ router.get('/prd/:projectName', async (req, res) => {
             res.json({
                 projectName,
                 projectPath,
-                prdFiles: prdFiles.sort((a, b) => new Date(b.modified) - new Date(a.modified)),
+                prdFiles: prdFiles.sort((a: any, b: any) => (new Date(b.modified) as any) - (new Date(a.modified) as any)),
                 timestamp: new Date().toISOString()
             });
 
@@ -1124,8 +1124,9 @@ router.post('/add-task/:projectName', async (req, res) => {
                 // Broadcast task update via WebSocket
                 if (req.app.locals.wss) {
                     broadcastTaskMasterTasksUpdate(
-                        req.app.locals.wss, 
-                        projectName
+                        req.app.locals.wss,
+                        projectName,
+                        null
                     );
                 }
 
@@ -1199,7 +1200,7 @@ router.put('/update-task/:projectName/:taskId', async (req, res) => {
                 if (code === 0) {
                     // Broadcast task update via WebSocket
                     if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
+                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName, null);
                     }
 
                     res.json({
@@ -1251,7 +1252,7 @@ router.put('/update-task/:projectName/:taskId', async (req, res) => {
                 if (code === 0) {
                     // Broadcast task update via WebSocket
                     if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
+                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName, null);
                     }
 
                     res.json({
@@ -1351,8 +1352,9 @@ router.post('/parse-prd/:projectName', async (req, res) => {
                 // Broadcast task update via WebSocket
                 if (req.app.locals.wss) {
                     broadcastTaskMasterTasksUpdate(
-                        req.app.locals.wss, 
-                        projectName
+                        req.app.locals.wss,
+                        projectName,
+                        null
                     );
                 }
 
@@ -1873,9 +1875,9 @@ router.post('/apply-template/:projectName', async (req, res) => {
         let content = template.content;
         
         // Replace placeholders with customizations
-        for (const [key, value] of Object.entries(customizations)) {
+        for (const [key, value] of Object.entries(customizations as any)) {
             const placeholder = `[${key}]`;
-            content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'g'), value);
+            content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'g'), value as string);
         }
 
         // Ensure .taskmaster/docs directory exists

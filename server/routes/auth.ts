@@ -89,23 +89,23 @@ router.post('/login', async (req, res) => {
     }
     
     // Get user from database
-    const user = userDb.getUserByUsername(username);
+    const user = userDb.getUserByUsername(username) as any;
     if (!user) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    
+
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    
+
     // Generate token
     const token = generateToken(user);
-    
+
     // Update last login
     userDb.updateLastLogin(user.id);
-    
+
     res.json({
       success: true,
       user: { id: user.id, username: user.username },
@@ -121,7 +121,7 @@ router.post('/login', async (req, res) => {
 // Get current user (protected route)
 router.get('/user', authenticateToken, (req, res) => {
   res.json({
-    user: req.user
+    user: (req as any).user
   });
 });
 

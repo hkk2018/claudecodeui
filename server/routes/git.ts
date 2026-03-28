@@ -175,7 +175,7 @@ router.get('/diff', async (req, res) => {
     let diff;
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
-      const filePath = path.join(projectPath, file);
+      const filePath = path.join(projectPath, file as string);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -244,7 +244,7 @@ router.get('/file-with-diff', async (req, res) => {
       currentContent = headContent; // Show the deleted content in editor
     } else {
       // Get current file content
-      const filePath = path.join(projectPath, file);
+      const filePath = path.join(projectPath, file as string);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -452,7 +452,7 @@ router.get('/commits', async (req, res) => {
       { cwd: projectPath }
     );
     
-    const commits = stdout
+    const commits: any[] = stdout
       .split('\n')
       .filter(line => line.trim())
       .map(line => {

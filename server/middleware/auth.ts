@@ -44,7 +44,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
 
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
@@ -77,7 +77,7 @@ const authenticateWebSocket = (token) => {
   // Platform mode: bypass token validation, return first user
   if (process.env.VITE_IS_PLATFORM === 'true') {
     try {
-      const user = userDb.getFirstUser();
+      const user = userDb.getFirstUser() as any;
       if (user) {
         return { userId: user.id, username: user.username };
       }

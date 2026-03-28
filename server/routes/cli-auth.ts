@@ -10,10 +10,11 @@ router.get('/claude/status', async (req, res) => {
   try {
     const credentialsResult = await checkClaudeCredentials();
 
-    if (credentialsResult.authenticated) {
+    const credsAny = credentialsResult as any;
+    if (credsAny.authenticated) {
       return res.json({
         authenticated: true,
-        email: credentialsResult.email || 'Authenticated',
+        email: credsAny.email || 'Authenticated',
         method: 'credentials_file'
       });
     }
@@ -21,7 +22,7 @@ router.get('/claude/status', async (req, res) => {
     return res.json({
       authenticated: false,
       email: null,
-      error: credentialsResult.error || 'Not authenticated'
+      error: credsAny.error || 'Not authenticated'
     });
 
   } catch (error) {
@@ -36,7 +37,7 @@ router.get('/claude/status', async (req, res) => {
 
 router.get('/cursor/status', async (req, res) => {
   try {
-    const result = await checkCursorStatus();
+    const result = await checkCursorStatus() as any;
 
     res.json({
       authenticated: result.authenticated,

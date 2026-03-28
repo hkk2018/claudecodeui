@@ -131,7 +131,7 @@ async function detectTaskMasterFolder(projectPath) {
                     tasks = tasksData.tasks;
                 } else {
                     // Tagged format - get tasks from all tags
-                    Object.values(tasksData).forEach(tagData => {
+                    Object.values(tasksData).forEach((tagData: any) => {
                         if (tagData.tasks) {
                             tasks = tasks.concat(tagData.tasks);
                         }
@@ -484,7 +484,7 @@ async function getProjects() {
         totalDisplay += performance.now() - t0;
         const fullPath = actualProjectDir;
 
-        const project = {
+        const project: any = {
           name: entry.name,
           path: actualProjectDir,
           displayName: customName || autoDisplayName,
@@ -556,7 +556,7 @@ async function getProjects() {
   }
   
   // Add manually configured projects that don't exist as folders yet
-  for (const [projectName, projectConfig] of Object.entries(config)) {
+  for (const [projectName, projectConfig] of Object.entries(config) as [string, any][]) {
     if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
       // Use the original path if available, otherwise extract from potential sessions
       let actualProjectDir = projectConfig.originalPath;
@@ -570,7 +570,7 @@ async function getProjects() {
         }
       }
       
-              const project = {
+              const project: any = {
           name: projectName,
           path: actualProjectDir,
           displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
@@ -677,7 +677,7 @@ async function getProjectsBasic() {
   }
 
   // Add manually configured projects
-  for (const [projectName, projectConfig] of Object.entries(config)) {
+  for (const [projectName, projectConfig] of Object.entries(config) as [string, any][]) {
     if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
       let actualProjectDir = projectConfig.originalPath;
       if (!actualProjectDir) {
@@ -731,7 +731,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
         return { file, mtime: stats.mtime };
       })
     );
-    filesWithStats.sort((a, b) => b.mtime - a.mtime);
+    filesWithStats.sort((a: any, b: any) => (b.mtime as any) - (a.mtime as any));
     
     const allSessions = new Map();
     const allEntries = [];
@@ -819,7 +819,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     });
     const visibleSessions = [...latestFromGroups, ...standaloneSessionsArray]
       .filter(session => !session.summary.startsWith('{ "'))
-      .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+      .sort((a: any, b: any) => (new Date(b.lastActivity) as any) - (new Date(a.lastActivity) as any));
 
     const total = visibleSessions.length;
     const paginatedSessions = visibleSessions.slice(offset, offset + limit);
@@ -1063,8 +1063,8 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
     }
 
     // Sort messages by timestamp
-    const sortedMessages = messages.sort((a, b) =>
-      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+    const sortedMessages = messages.sort((a: any, b: any) =>
+      (new Date(a.timestamp || 0) as any) - (new Date(b.timestamp || 0) as any)
     );
 
     const total = sortedMessages.length;
@@ -1297,7 +1297,7 @@ async function getCursorSessions(projectPath) {
         `);
         
         // Parse metadata
-        let metadata = {};
+        let metadata: any = {};
         for (const row of metaRows) {
           if (row.value) {
             try {
@@ -1350,7 +1350,7 @@ async function getCursorSessions(projectPath) {
     }
     
     // Sort sessions by creation time (newest first)
-    sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    sessions.sort((a: any, b: any) => (new Date(b.createdAt) as any) - (new Date(a.createdAt) as any));
     
     // Return only the first 5 sessions for performance
     return sessions.slice(0, 5);

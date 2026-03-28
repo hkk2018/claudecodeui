@@ -247,7 +247,7 @@ export function sanitizeOutput(output) {
  * @param {object} options - Options for bash execution
  * @returns {Promise<string>} Content with bash commands executed and replaced
  */
-export async function processBashCommands(content, options = {}) {
+export async function processBashCommands(content, options: any = {}) {
   if (!content) return content;
 
   const { cwd = process.cwd(), timeout = BASH_TIMEOUT } = options;

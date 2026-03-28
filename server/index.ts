@@ -10,7 +10,7 @@ const __dirname = dirname(__filename);
 
 // Parse command line arguments (e.g., --port=9001)
 // CLI args take priority over environment variables to avoid child process inheritance
-const cliArgs = {};
+const cliArgs: any = {};
 process.argv.slice(2).forEach(arg => {
     const match = arg.match(/^--(\w+)=(.+)$/);
     if (match) {
@@ -88,7 +88,7 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 
 // File system watcher for projects folder
 let projectsWatcher = null;
-const connectedClients = new Set();
+const connectedClients = new Set<any>();
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -194,7 +194,7 @@ const wss = new WebSocketServer({
                 return false;
             }
             info.req.user = user;
-            console.log('[OK] Platform mode WebSocket authenticated for user:', user.username);
+            console.log('[OK] Platform mode WebSocket authenticated for user:', (user as any).username);
             return true;
         }
 
@@ -213,7 +213,7 @@ const wss = new WebSocketServer({
 
         // Store user info in the request for later use
         info.req.user = user;
-        console.log('[OK] WebSocket authenticated for user:', user.username);
+        console.log('[OK] WebSocket authenticated for user:', (user as any).username);
         return true;
     }
 });
@@ -308,10 +308,10 @@ app.get('/api/debug/info', authenticateToken, (req, res) => {
 
 app.get('/api/debug/messages', authenticateToken, (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = parseInt(req.query.offset) || 0;
-    const sessionId = req.query.sessionId;
-    const type = req.query.type;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const sessionId = req.query.sessionId as string;
+    const type = req.query.type as string;
 
     const result = getDebugMessages({ limit, offset, sessionId, type });
     res.json(result);
@@ -432,7 +432,7 @@ app.get('/api/projects/basic', authenticateToken, async (req, res) => {
 app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
     try {
         const { limit = 5, offset = 0 } = req.query;
-        const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
+        const result = await getSessions(req.params.projectName, parseInt(limit as string), parseInt(offset as string));
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -446,8 +446,8 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
         const { limit, offset } = req.query;
         
         // Parse limit and offset if provided
-        const parsedLimit = limit ? parseInt(limit, 10) : null;
-        const parsedOffset = offset ? parseInt(offset, 10) : 0;
+        const parsedLimit = limit ? parseInt(limit as string, 10) : null;
+        const parsedOffset = offset ? parseInt(offset as string, 10) : 0;
         
         const result = await getSessionMessages(projectName, sessionId, parsedLimit, parsedOffset);
         
@@ -524,7 +524,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         
         // Default to home directory if no path provided
         const homeDir = os.homedir();
-        let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;
+        let targetPath = dirPath ? (dirPath as string).replace('~', homeDir) : homeDir;
         
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
@@ -596,9 +596,9 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         }
 
         // Handle both absolute and relative paths
-        const resolved = path.isAbsolute(filePath)
-            ? path.resolve(filePath)
-            : path.resolve(projectRoot, filePath);
+        const resolved = path.isAbsolute(filePath as string)
+            ? path.resolve(filePath as string)
+            : path.resolve(projectRoot, filePath as string);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
         if (!resolved.startsWith(normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
@@ -636,7 +636,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        const resolved = path.resolve(filePath);
+        const resolved = path.resolve(filePath as string);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
         if (!resolved.startsWith(normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
@@ -695,9 +695,9 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         }
 
         // Handle both absolute and relative paths
-        const resolved = path.isAbsolute(filePath)
-            ? path.resolve(filePath)
-            : path.resolve(projectRoot, filePath);
+        const resolved = path.isAbsolute(filePath as string)
+            ? path.resolve(filePath as string)
+            : path.resolve(projectRoot, filePath as string);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
         if (!resolved.startsWith(normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
@@ -1272,6 +1272,7 @@ app.post('/api/transcribe', authenticateToken, async (req, res) => {
 
                 // Handle different enhancement modes
                 try {
+                    // @ts-ignore
                     const OpenAI = (await import('openai')).default;
                     const openai = new OpenAI({ apiKey });
 
@@ -1388,7 +1389,7 @@ app.post('/api/voice/transcribe', authenticateToken, async (req, res) => {
                 // Convert to 16kHz mono WAV via ffmpeg
                 await new Promise((resolve, reject) => {
                     execFile('ffmpeg', ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-f', 'wav', convertedPath], (err) => {
-                        if (err) reject(err); else resolve();
+                        if (err) reject(err); else resolve(undefined);
                     });
                 });
 
@@ -1487,7 +1488,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 
         // Configure multer for image uploads
         const storage = multer.diskStorage({
-            destination: async (req, file, cb) => {
+            destination: async (req: any, file, cb) => {
                 const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id));
                 await fs.mkdir(uploadDir, { recursive: true });
                 cb(null, uploadDir);
@@ -1518,26 +1519,27 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
         });
 
         // Handle multipart form data
-        upload.array('images', 5)(req, res, async (err) => {
+        upload.array('images', 5)(req as any, res, async (err) => {
             if (err) {
                 return res.status(400).json({ error: err.message });
             }
 
-            if (!req.files || req.files.length === 0) {
+            const reqAny = req as any;
+            if (!reqAny.files || reqAny.files.length === 0) {
                 return res.status(400).json({ error: 'No image files provided' });
             }
 
             try {
                 // Process uploaded images - keep files on disk and return metadata with URLs
                 const processedImages = await Promise.all(
-                    req.files.map(async (file) => {
+                    (reqAny.files as any[]).map(async (file) => {
                         // Read file and convert to base64 (for immediate use by SDK)
                         const buffer = await fs.readFile(file.path);
                         const base64 = buffer.toString('base64');
                         const mimeType = file.mimetype;
 
                         // Generate relative path for the image (userId/filename)
-                        const relativePath = `${req.user.id}/${file.filename}`;
+                        const relativePath = `${reqAny.user.id}/${file.filename}`;
                         const url = `/api/images/${relativePath}`;
 
                         return {
@@ -1555,7 +1557,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             } catch (error) {
                 console.error('Error processing images:', error);
                 // Clean up any remaining files
-                await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => { })));
+                await Promise.all((reqAny.files as any[]).map((f: any) => fs.unlink(f.path).catch(() => { })));
                 res.status(500).json({ error: 'Failed to process images' });
             }
         });
@@ -1575,7 +1577,7 @@ app.get('/api/images/:userId/:filename', authenticateToken, async (req, res) => 
         const { userId, filename } = req.params;
 
         // Security: ensure user can only access their own images
-        if (String(req.user.id) !== userId) {
+        if (String((req as any).user.id) !== userId) {
             return res.status(403).json({ error: 'Forbidden' });
         }
 
@@ -1865,7 +1867,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
                 entry.name === 'build') continue;
 
             const itemPath = path.join(dirPath, entry.name);
-            const item = {
+            const item: any = {
                 name: entry.name,
                 path: itemPath,
                 type: entry.isDirectory() ? 'directory' : 'file'
