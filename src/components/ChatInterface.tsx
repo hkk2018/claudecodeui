@@ -1822,8 +1822,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return '';
   });
   const [chatMessages, setChatMessages] = useState(() => {
-    if (typeof window !== 'undefined' && selectedProject) {
-      const saved = safeLocalStorage.getItem(`chat_messages_${selectedProject.name}`);
+    if (typeof window !== 'undefined' && selectedSession?.id) {
+      const saved = safeLocalStorage.getItem(`chat_messages_${selectedSession.id}`);
       return saved ? JSON.parse(saved) : [];
     }
     return [];
@@ -3231,10 +3231,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setChatMessages(prev => {
         // Only preserve permission requests that are NOT yet resolved
         // Resolved ones should be removed since they're no longer interactive
-        const pendingPermissionRequests = prev.filter(m => m.isPermissionRequest && !m.permissionResolved);
+        const pendingPermissionRequests = prev.filter(m =>
+          m.isPermissionRequest && !m.permissionResolved &&
+          m.permissionData?.sessionId === selectedSession?.id
+        );
         if (pendingPermissionRequests.length > 0) {
           console.log('📌 Preserving', pendingPermissionRequests.length, 'pending permission request(s) during convertedMessages sync');
-          // Merge convertedMessages with pending permission requests
           return [...convertedMessages, ...pendingPermissionRequests];
         }
         return convertedMessages;
@@ -3258,12 +3260,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input, selectedProject]);
 
-  // Persist chat messages to localStorage
+  // Persist chat messages to localStorage (scoped to session, excluding ephemeral permission requests)
   useEffect(() => {
-    if (selectedProject && chatMessages.length > 0) {
-      safeLocalStorage.setItem(`chat_messages_${selectedProject.name}`, JSON.stringify(chatMessages));
+    if (selectedSession?.id && chatMessages.length > 0) {
+      const persistable = chatMessages.filter(m => !m.isPermissionRequest);
+      if (persistable.length > 0) {
+        safeLocalStorage.setItem(`chat_messages_${selectedSession.id}`, JSON.stringify(persistable));
+      }
     }
-  }, [chatMessages, selectedProject]);
+  }, [chatMessages, selectedSession]);
 
   // Load saved state when project changes (but don't interfere with session loading)
   useEffect(() => {
@@ -3784,8 +3789,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           
           // Clear persisted chat messages after successful completion
-          if (selectedProject && latestMessage.exitCode === 0) {
-            safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
+          if (latestMessage.exitCode === 0) {
+            const completedId = latestMessage.sessionId || selectedSession?.id;
+            if (completedId) {
+              safeLocalStorage.removeItem(`chat_messages_${completedId}`);
+            }
           }
           break;
           
