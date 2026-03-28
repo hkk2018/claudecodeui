@@ -3177,8 +3177,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // External Message Update Handler: Reload messages when external CLI modifies current session
   // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
   // Only reloads if the session is NOT active (respecting Session Protection System)
+  // Now checks sessionId to ensure only the affected session reloads
   useEffect(() => {
-    if (externalMessageUpdate > 0 && selectedSession && selectedProject) {
+    if (
+      externalMessageUpdate.timestamp > 0 &&
+      selectedSession &&
+      selectedProject &&
+      externalMessageUpdate.sessionId === selectedSession.id
+    ) {
       const reloadExternalMessages = async () => {
         try {
           const provider = localStorage.getItem('selected-provider') || 'claude';

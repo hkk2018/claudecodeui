@@ -78,7 +78,11 @@ function AppContent() {
 
   // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
   // Triggers ChatInterface to reload messages without switching sessions
-  const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+  // Now includes sessionId to ensure only the affected session reloads
+  const [externalMessageUpdate, setExternalMessageUpdate] = useState<{ sessionId: string | null; timestamp: number }>({
+    sessionId: null,
+    timestamp: 0
+  });
 
   // Session Switching State: Track when user is switching sessions to show loading overlay
   const [isSwitchingSession, setIsSwitchingSession] = useState(false);
@@ -153,8 +157,11 @@ function AppContent() {
 
             // Check if this is the currently-selected session
             if (changedSessionId === selectedSession.id) {
-              // Trigger message reload
-              setExternalMessageUpdate(prev => prev + 1);
+              // Trigger message reload with session ID to ensure only this session reloads
+              setExternalMessageUpdate({
+                sessionId: changedSessionId,
+                timestamp: Date.now()
+              });
             }
           }
         }
