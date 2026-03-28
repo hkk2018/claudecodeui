@@ -874,7 +874,7 @@ function handleChatConnection(ws) {
                 // Record user's permission response to debug log
                 addDebugMessage({
                     id: `${data.requestId}_response`,
-                    sessionId: ws.sessionId || 'unknown',
+                    sessionId: data.sessionId || 'unknown',
                     layer1: null, // No SDK layer for user responses
                     layer2: {
                         type: 'permission-response',
@@ -907,6 +907,7 @@ function handleChatConnection(ws) {
             console.error('[ERROR] Chat WebSocket error:', error.message);
             ws.send(JSON.stringify({
                 type: 'error',
+                ...(data?.options?.sessionId ? { sessionId: data.options.sessionId } : data?.sessionId ? { sessionId: data.sessionId } : {}),
                 error: error.message
             }));
         }

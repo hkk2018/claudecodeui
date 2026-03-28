@@ -473,7 +473,7 @@ async function loadMcpConfig(cwd) {
  * @param {Object} ws - WebSocket connection
  * @returns {Function} canUseTool callback function
  */
-function createCanUseTool(ws) {
+function createCanUseTool(ws, sessionId: string) {
   return async (toolName, input, options) => {
     const { signal, suggestions, toolUseID } = options;
 
@@ -511,7 +511,7 @@ function createCanUseTool(ws) {
     const wsMessage = {
       type: 'permission-request',
       requestId,
-      sessionId: ws.sessionId, // Add sessionId to bind permission to specific session
+      sessionId, // Bind permission to specific session
       toolName,
       toolInput: input,
       toolUseID,
@@ -525,7 +525,7 @@ function createCanUseTool(ws) {
     // Record to debug log (Layer 1: SDK callback params, Layer 2: WebSocket message)
     addDebugMessage({
       id: requestId,
-      sessionId: ws.sessionId || 'unknown',
+      sessionId: sessionId || 'unknown',
       layer1: { toolName, input, toolUseID, suggestions },
       layer2: wsMessage,
       source: 'permission-request'
@@ -567,7 +567,7 @@ async function queryClaudeSDK(command, options: any = {}, ws) {
     tempDir = imageResult.tempDir;
 
     // Create canUseTool callback for permission handling
-    const canUseTool = createCanUseTool(ws);
+    const canUseTool = createCanUseTool(ws, capturedSessionId);
 
     // Create SDK query instance with canUseTool callback
     const queryInstance = query({
@@ -681,6 +681,7 @@ async function queryClaudeSDK(command, options: any = {}, ws) {
     // Send error to WebSocket
     ws.send(JSON.stringify({
       type: 'claude-error',
+      sessionId: capturedSessionId,
       error: error.message
     }));
 

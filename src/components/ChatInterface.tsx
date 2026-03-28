@@ -3283,7 +3283,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete', 'session-status'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'active-sessions'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
 
       // Extract session ID from message - it can be in different places depending on message type
