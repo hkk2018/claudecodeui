@@ -5,8 +5,9 @@ import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
-import { MessageSquare, Clock, Search, X, Folder, User, Bot } from 'lucide-react';
+import { MessageSquare, Clock, Search, X, Folder, User, Bot, Star } from 'lucide-react';
 import { api } from '../utils/api';
+import { useFavorites, makeKey, toggleFavorite } from '../stores/favoritesStore';
 
 // Format time ago helper
 const formatTimeAgo = (dateString: any, currentTime: any) => {
@@ -83,6 +84,7 @@ function MessagesView({
 }) {
   const [searchFilter, setSearchFilter] = useState('');
   const [previewSession, setPreviewSession] = useState(null);
+  const favorites = useFavorites();
 
   // Flatten all sessions from all projects with project info attached
   const allSessions = useMemo(() => {
@@ -137,10 +139,21 @@ function MessagesView({
     });
   }, [allSessions, searchFilter]);
 
-  // Group sessions by time period
+  // Separate favorites from the rest
+  const favoriteSessions = useMemo(() =>
+    filteredSessions.filter(s => favorites.has(makeKey(s.__projectName, s.id))),
+    [filteredSessions, favorites]
+  );
+
+  const nonFavoriteSessions = useMemo(() =>
+    filteredSessions.filter(s => !favorites.has(makeKey(s.__projectName, s.id))),
+    [filteredSessions, favorites]
+  );
+
+  // Group non-favorite sessions by time period
   const groupedSessions = useMemo(() =>
-    groupByTimePeriod(filteredSessions, currentTime),
-    [filteredSessions, currentTime]
+    groupByTimePeriod(nonFavoriteSessions, currentTime),
+    [nonFavoriteSessions, currentTime]
   );
 
   const handleSessionClick = (session) => {
@@ -199,7 +212,17 @@ function MessagesView({
               <h4 className="text-sm font-medium text-foreground truncate">
                 {sessionName}
               </h4>
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(session.__projectName, session.id);
+                  }}
+                  className="p-0.5 rounded hover:bg-accent transition-colors"
+                  title={favorites.has(makeKey(session.__projectName, session.id)) ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Star className={`w-3 h-3 ${favorites.has(makeKey(session.__projectName, session.id)) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/40 hover:text-yellow-400'} transition-colors`} />
+                </button>
                 <Clock className="w-3 h-3 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
                   {formatTimeAgo(session.lastActivity, currentTime)}
@@ -343,6 +366,7 @@ function MessagesView({
             </div>
           ) : (
             <>
+              {favoriteSessions.length > 0 && renderGroup('⭐ Favorites', favoriteSessions)}
               {renderGroup('Today', groupedSessions.today)}
               {renderGroup('Yesterday', groupedSessions.yesterday)}
               {renderGroup('This Week', groupedSessions.thisWeek)}

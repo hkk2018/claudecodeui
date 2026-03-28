@@ -25,6 +25,8 @@ import FloatingSidebarButton from './FloatingSidebarButton';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
+import { Star } from 'lucide-react';
+import { useFavorite } from '../stores/favoritesStore';
 
 function MainContent({
   selectedProject,
@@ -71,6 +73,9 @@ function MainContent({
   
   // Only show tasks tab if TaskMaster is installed and enabled
   const shouldShowTasksTab = tasksEnabled && isTaskMasterInstalled;
+
+  // Favorites
+  const [isFav, toggleFav] = useFavorite(selectedProject?.name, selectedSession?.id);
 
   // Sync selectedProject with TaskMaster context
   useEffect(() => {
@@ -314,9 +319,18 @@ function MainContent({
               <div className="min-w-0 flex-1">
                 {activeTab === 'chat' && selectedSession ? (
                   <div className="min-w-0">
-                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap overflow-x-auto scrollbar-hide">
-                      {selectedSession.__provider === 'cursor' ? (selectedSession.name || 'Untitled Session') : (selectedSession.summary || 'New Session')}
-                    </h2>
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap overflow-x-auto scrollbar-hide min-w-0">
+                        {selectedSession.__provider === 'cursor' ? (selectedSession.name || 'Untitled Session') : (selectedSession.summary || 'New Session')}
+                      </h2>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFav(); }}
+                        className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                      >
+                        <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400 hover:text-yellow-400'} transition-colors`} />
+                      </button>
+                    </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {selectedProject.displayName}
                     </div>
