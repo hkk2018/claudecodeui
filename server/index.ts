@@ -781,8 +781,9 @@ function handleChatConnection(ws) {
     connectedClients.add(ws);
 
     ws.on('message', async (message) => {
+        let data: any = null;
         try {
-            const data = JSON.parse(message);
+            data = JSON.parse(message);
 
             if (data.type === 'claude-command') {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
