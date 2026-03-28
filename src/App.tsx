@@ -199,83 +199,18 @@ function AppContent() {
     try {
       setIsLoadingProjects(true);
 
-      // Phase 1: Fast load - get basic project info without sessions
-      console.log('[INIT] 📡 Fetching basic project info...');
-      console.time('[INIT] api.projectsBasic()');
-      const basicResponse = await api.projectsBasic();
-      const basicData = await basicResponse.json();
-      console.timeEnd('[INIT] api.projectsBasic()');
-      console.log(`[INIT] ✅ Got ${basicData.length} projects (basic info)`);
+      // Single-phase load: Get complete project data with sessions
+      // This ensures data consistency and avoids showing empty projects
+      console.log('[INIT] 📡 Fetching projects with sessions...');
+      console.time('[INIT] api.projects()');
+      const response = await api.projects();
+      const projectsData = await response.json();
+      console.timeEnd('[INIT] api.projects()');
+      console.log(`[INIT] ✅ Got ${projectsData.length} projects with sessions`);
 
-      // Immediately show projects in sidebar (without sessions)
-      setProjects(basicData);
-      setIsLoadingProjects(false); // Allow UI to render immediately
-      console.log(`[INIT] ✅ Basic projects displayed in ${(performance.now() - initStart).toFixed(0)}ms`);
-
-      // Phase 2: Progressive load - fetch sessions for each project in parallel
-      console.log('[INIT] 🔄 Loading sessions progressively...');
-      const sessionLoadStart = performance.now();
-
-      // Load sessions in parallel with concurrency limit
-      const CONCURRENCY = 3;
-      const loadSessionsForProject = async (project) => {
-        try {
-          // Fetch Claude sessions and Cursor sessions in parallel
-          const [sessionsResponse, cursorResponse] = await Promise.all([
-            api.sessions(project.name, 5, 0),
-            authenticatedFetch(`/api/cursor/sessions?projectPath=${encodeURIComponent(project.fullPath || project.path)}`)
-          ]);
-
-          const sessionsData = await sessionsResponse.json();
-          const cursorData = cursorResponse.ok ? await cursorResponse.json() : { sessions: [] };
-
-          return {
-            projectName: project.name,
-            sessions: sessionsData.sessions || [],
-            sessionMeta: { hasMore: sessionsData.hasMore, total: sessionsData.total },
-            cursorSessions: cursorData.success ? cursorData.sessions : []
-          };
-        } catch (error) {
-          console.warn(`[INIT] ⚠️ Failed to load sessions for ${project.name}:`, error.message);
-          return {
-            projectName: project.name,
-            sessions: [],
-            sessionMeta: { hasMore: false, total: 0 },
-            cursorSessions: []
-          };
-        }
-      };
-
-      // Process in batches for controlled concurrency
-      let loadedCount = 0;
-      for (let i = 0; i < basicData.length; i += CONCURRENCY) {
-        const batch = basicData.slice(i, i + CONCURRENCY);
-        const results = await Promise.all(batch.map(loadSessionsForProject));
-
-        // Update projects with loaded sessions
-        setProjects(prevProjects => {
-          const updated = [...prevProjects];
-          for (const result of results) {
-            const idx = updated.findIndex(p => p.name === result.projectName);
-            if (idx !== -1) {
-              updated[idx] = {
-                ...updated[idx],
-                sessions: result.sessions,
-                sessionMeta: result.sessionMeta,
-                cursorSessions: result.cursorSessions,
-                sessionsLoaded: true
-              };
-            }
-          }
-          return updated;
-        });
-
-        loadedCount += batch.length;
-        console.log(`[INIT] 🔄 Sessions: ${loadedCount}/${basicData.length} projects loaded`);
-      }
-
-      console.log(`[INIT] ✅ All sessions loaded in ${(performance.now() - sessionLoadStart).toFixed(0)}ms`);
-      console.log(`[INIT] ✅ Total fetchProjects time: ${(performance.now() - initStart).toFixed(0)}ms`);
+      setProjects(projectsData);
+      setIsLoadingProjects(false);
+      console.log(`[INIT] ✅ Projects loaded in ${(performance.now() - initStart).toFixed(0)}ms`);
       console.timeEnd('[INIT] fetchProjects total');
     } catch (error) {
       console.error('[INIT] ❌ Error fetching projects:', error);
