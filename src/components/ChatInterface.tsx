@@ -5281,8 +5281,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   setIsTextareaExpanded(isExpanded);
                 }}
                 placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
-                disabled={currentProcessingState.value.isLoading}
-                className="chat-input-placeholder block w-full px-2 py-1.5 sm:py-4 bg-transparent focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+                className="chat-input-placeholder block w-full px-2 py-1.5 sm:py-4 bg-transparent focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
                 style={{ height: '50px' }}
               />
               {/* Hint text inside input box at bottom - Desktop only */}
