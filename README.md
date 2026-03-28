@@ -124,8 +124,8 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 ```bash
 git clone https://github.com/hkk2018/claudecodeui.git
 cd claudecodeui
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 The application will start at `http://localhost:3001` by default.
@@ -136,10 +136,10 @@ You can customize the port using command line arguments or environment variables
 
 ```bash
 # Using command line argument (recommended)
-node server/index.js --port=9001
+node dist-server/index.js --port=9001
 
 # Using environment variable
-PORT=9001 npm run start
+PORT=9001 pnpm run start
 
 # Priority: --port argument > PORT env variable > 3001 (default)
 ```
@@ -152,17 +152,27 @@ If you prefer the stable upstream version:
 npx @siteboon/claude-code-ui
 ```
 
+## Data Storage
+
+User authentication data is stored at `~/.claude-code-ui/auth.db` (SQLite). This location is independent of the installation directory, so data persists across builds, reinstalls, and different run modes (development vs production).
+
+To use a custom path, set the `DATABASE_PATH` environment variable:
+
+```bash
+DATABASE_PATH=/path/to/auth.db node dist-server/index.js
+```
+
 ## Development
 
 ```bash
 # Development mode (with hot reload)
-npm run dev
+pnpm run dev
 
-# Build for production
-npm run build
+# Build for production (client + server)
+pnpm run build
 
 # Start production server
-npm run start
+pnpm run start
 ```
 
 ## Security & Tools Configuration
