@@ -3093,6 +3093,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setClaudeStatus(null);
           setSessionStartTime(null);
 
+          // Reset pull-to-refresh state to prevent stale state from previous session
+          setPullToRefreshState('idle');
+          setPullDistance(0);
+          wheelAccumulator.current = 0;
+          clearTimeout(wheelResetTimer.current);
+
           // Query server for current processing state of this session
           // Signal already preserves state across switches, but this syncs with server truth
           if (sendMessage) {
