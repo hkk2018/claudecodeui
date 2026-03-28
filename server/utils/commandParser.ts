@@ -158,7 +158,7 @@ export function validateCommand(commandString) {
 
   // Check for shell operators or control structures
   const hasOperators = parsed.some(token =>
-    typeof token === 'object' && token.op
+    typeof token === 'object' && 'op' in token
   );
 
   if (hasOperators) {
