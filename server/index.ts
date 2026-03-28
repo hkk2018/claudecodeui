@@ -68,7 +68,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getProjectsBasic, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest, getAllSessionsStatus, getAllPendingPermissions, getDebugInfo, addDebugMessage, getDebugMessages } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest, getPendingPermissionsBySession, getAllSessionsStatus, getAllPendingPermissions, getDebugInfo, addDebugMessage, getDebugMessages } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -459,6 +459,16 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
             // New format with pagination info
             res.json(result);
         }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get pending permission requests for a specific session
+app.get('/api/sessions/:sessionId/pending-permissions', authenticateToken, (req, res) => {
+    try {
+        const permissions = getPendingPermissionsBySession(req.params.sessionId);
+        res.json(permissions);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
