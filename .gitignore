@@ -101,14 +101,15 @@ temp/
 .netlify
 
 # AI specific
-.claude/
+.claude/*
+!.claude/CLAUDE.md
 .cursor/
 .roo/
 .taskmaster/
 .cline/
 .windsurf/
 .serena/
-CLAUDE.md
+/CLAUDE.md
 .mcp.json
 
 
