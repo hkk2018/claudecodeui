@@ -28,6 +28,7 @@ import MobileNav from './components/MobileNav';
 import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 import DebugPanel from './components/DebugPanel';
+import { clearSession, setSessionMessages } from './stores/sessionSignals';
 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -147,17 +148,39 @@ function AppContent() {
 
       if (latestMessage.type === 'projects_updated') {
         // External Session Update Detection: Check if the changed file is the current session's JSONL
-        // If so, trigger a message reload in ChatInterface
-        if (latestMessage.changedFile && selectedSession && selectedProject) {
-          // Extract session ID from changedFile (format: "project-name/session-id.jsonl")
+        // Background reload strategy: immediately reload changed session in background
+        if (latestMessage.changedFile) {
+          // Extract project name and session ID from changedFile (format: "project-name/session-id.jsonl")
           const changedFileParts = latestMessage.changedFile.split('/');
           if (changedFileParts.length >= 2) {
+            const projectName = changedFileParts[0];
             const filename = changedFileParts[changedFileParts.length - 1];
             const changedSessionId = filename.replace('.jsonl', '');
 
-            // Check if this is the currently-selected session
-            if (changedSessionId === selectedSession.id) {
-              // Trigger message reload with session ID to ensure only this session reloads
+            // Background reload: fetch latest messages and update cache immediately
+            // This makes session switching instant - no loading spinner when user switches
+            (async () => {
+              try {
+                const response = await api.sessionMessages(projectName, changedSessionId, 100, 0);
+                if (response.ok) {
+                  const data = await response.json();
+                  const messages = data.messages || [];
+                  const pagination = {
+                    offset: messages.length,
+                    hasMore: data.hasMore ?? false,
+                    total: data.total ?? messages.length,
+                  };
+                  // Update Session Store cache with latest messages
+                  setSessionMessages(changedSessionId, messages, pagination);
+                  console.log(`[BACKGROUND] ✅ Reloaded session ${changedSessionId.slice(0, 8)} (${messages.length} messages)`);
+                }
+              } catch (error) {
+                console.error('[BACKGROUND] Failed to reload session:', error);
+              }
+            })();
+
+            // If user is currently viewing this session, trigger UI reload immediately
+            if (selectedSession && changedSessionId === selectedSession.id) {
               setExternalMessageUpdate({
                 sessionId: changedSessionId,
                 timestamp: Date.now()
@@ -166,29 +189,10 @@ function AppContent() {
           }
         }
 
-        // Update projects state with the new data from WebSocket
-        const updatedProjects = latestMessage.projects;
-        setProjects(updatedProjects);
-
-        // Update selected project if it exists in the updated projects
-        if (selectedProject) {
-          const updatedSelectedProject = updatedProjects.find(p => p.name === selectedProject.name);
-          if (updatedSelectedProject) {
-            // Only update selected project if it actually changed - prevents flickering
-            if (JSON.stringify(updatedSelectedProject) !== JSON.stringify(selectedProject)) {
-              setSelectedProject(updatedSelectedProject);
-            }
-
-            // Update selected session only if it was deleted - avoid unnecessary reloads
-            if (selectedSession) {
-              const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
-              if (!updatedSelectedSession) {
-                // Session was deleted
-                setSelectedSession(null);
-              }
-              // Don't update if session still exists with same ID - prevents reload
-            }
-          }
+        // Only update projects if the watcher sent a full projects payload
+        // Lightweight notifications (file-change only) skip this to avoid overwriting
+        if (latestMessage.projects) {
+          setProjects(latestMessage.projects);
         }
       }
     }

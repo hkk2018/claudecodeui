@@ -122,25 +122,21 @@ async function setupProjectsWatcher() {
         });
 
         // Debounce function to prevent excessive notifications
+        // Only sends lightweight file-change notifications; does NOT reload all projects
         let debounceTimer;
         const debouncedUpdate = async (eventType, filePath) => {
             clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(async () => {
+            debounceTimer = setTimeout(() => {
                 try {
-
-                    // Clear project directory cache when files change
                     clearProjectDirectoryCache();
 
-                    // Get updated projects list
-                    const updatedProjects = await getProjects();
-
-                    // Notify all connected clients about the project changes
+                    // Send lightweight notification (no projects payload)
+                    // Frontend uses changedFile to reload only the affected session
                     const updateMessage = JSON.stringify({
                         type: 'projects_updated',
-                        projects: updatedProjects,
-                        timestamp: new Date().toISOString(),
                         changeType: eventType,
-                        changedFile: path.relative(claudeProjectsPath, filePath)
+                        changedFile: path.relative(claudeProjectsPath, filePath),
+                        timestamp: new Date().toISOString()
                     });
 
                     connectedClients.forEach(client => {
@@ -148,11 +144,10 @@ async function setupProjectsWatcher() {
                             client.send(updateMessage);
                         }
                     });
-
                 } catch (error) {
                     console.error('[ERROR] Error handling project changes:', error);
                 }
-            }, 300); // 300ms debounce (slightly faster than before)
+            }, 500);
         };
 
         // Set up event listeners
