@@ -1876,8 +1876,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorPosition, setCursorPosition] = useState(0);
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
   // canAbortSession now comes from sessionSignals store (per-session)
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
+  const isUserScrolledUp = useSignal(false);
   // Pull-to-refresh at bottom state
   const [pullToRefreshState, setPullToRefreshState] = useState('idle'); // 'idle' | 'pulling' | 'ready' | 'refreshing'
   const [pullDistance, setPullDistance] = useState(0);
@@ -2917,8 +2916,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const isAtBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Only consider "at bottom" if within 5px (essentially at bottom)
-    return scrollHeight - scrollTop - clientHeight < 5;
+    // Consider "at bottom" if within 50px
+    return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
 
   // Handle scroll events to detect when user manually scrolls up and load more messages
@@ -2926,8 +2925,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (scrollContainerRef.current) {
       const container = scrollContainerRef.current;
       const atBottom = isAtBottom();
-      // Only allow auto-scroll if user is at the very bottom (within 5px)
-      setIsUserScrolledUp(!atBottom);
+      isUserScrolledUp.value = !atBottom;
       // Track if at bottom for pull-to-refresh
       isAtBottomRef.current = atBottom;
 
@@ -4018,40 +4016,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return result;
   }, [chatMessages, visibleMessageCount]);
 
-  // Capture scroll position before render when auto-scroll is disabled
+  // Auto-scroll to bottom when new messages arrive, only if user is at the bottom
   useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = {
-        height: container.scrollHeight,
-        top: container.scrollTop
-      };
+    if (scrollContainerRef.current && chatMessages.length > 0 && !isUserScrolledUp.value) {
+      setTimeout(() => scrollToBottom(), 50);
     }
-  });
-
-  useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      if (autoScrollToBottom) {
-        // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
-        if (!isUserScrolledUp) {
-          setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
-        }
-      } else {
-        // When auto-scroll is disabled, preserve the visual position
-        const container = scrollContainerRef.current;
-        const prevHeight = scrollPositionRef.current.height;
-        const prevTop = scrollPositionRef.current.top;
-        const newHeight = container.scrollHeight;
-        const heightDiff = newHeight - prevHeight;
-
-        // If content was added above the current view, adjust scroll position
-        if (heightDiff > 0 && prevTop > 0) {
-          container.scrollTop = prevTop + heightDiff;
-        }
-      }
-    }
-  }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
+  }, [chatMessages.length, scrollToBottom]);
 
   // Scroll to bottom when messages first load after session switch
   useEffect(() => {
@@ -4059,7 +4029,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Only scroll if we're not in the middle of loading a session
       // This prevents the "double scroll" effect during session switching
       // Reset scroll state when switching sessions
-      setIsUserScrolledUp(false);
+      isUserScrolledUp.value = false;
       setTimeout(() => {
         scrollToBottom();
         // After scrolling, the scroll event handler will naturally set isUserScrolledUp based on position
@@ -4297,7 +4267,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setSessionStartTime(Date.now());
     
     // Always scroll to bottom when user sends a message and reset scroll state
-    setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Claude's response
+    isUserScrolledUp.value = false; // Reset scroll state so auto-scroll works for Claude's response
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
 
     // Determine effective session id for replies to avoid race on state updates
@@ -4378,7 +4348,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setTimeout(() => {
       isSubmittingRef.current = false;
     }, 100);
-  }, [input, selectedProject, attachedImages, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, selectedProject, attachedImages, selectedSession, provider, permissionMode, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setClaudeStatus, scrollToBottom]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
@@ -5134,7 +5104,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             )}
 
             {/* Scroll to bottom button - positioned next to mode indicator */}
-            {isUserScrolledUp && chatMessages.length > 0 && (
+            {isUserScrolledUp.value && chatMessages.length > 0 && (
               <button
                 onClick={scrollToBottom}
                 className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
