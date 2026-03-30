@@ -685,9 +685,9 @@ function Sidebar({
             </div>
           )}
 
-          {/* Action Buttons - Desktop only, projects view only */}
-          {!isMobile && viewMode === 'projects' && (
-            <div className="flex gap-2">
+          {/* Action Buttons - Show on tablet/desktop (md:flex), hide on mobile */}
+          {viewMode === 'projects' && (
+            <div className="hidden md:flex gap-2">
               <Button
                 variant="default"
                 size="sm"
