@@ -295,10 +295,50 @@ function getAllSessions() {
  * @param {Object} sdkMessage - SDK message object
  * @returns {Object} Transformed message ready for WebSocket
  */
-function transformMessage(sdkMessage) {
+function transformMessage(sdkMessage, projectName) {
   // SDK messages are already in a format compatible with the frontend
   // The CLI sends them wrapped in {type: 'claude-response', data: message}
   // We'll do the same here to maintain compatibility
+
+  // Check if message contains image paths and convert them to URLs
+  if (sdkMessage.type === 'text' && sdkMessage.content && typeof sdkMessage.content === 'string') {
+    const imagePathPattern = /\[Images provided at the following paths:\]\n((?:\d+\.\s+.+\n?)+)/;
+    const match = sdkMessage.content.match(imagePathPattern);
+
+    if (match) {
+      // Extract image paths
+      const pathLines = match[1].trim().split('\n');
+      const images = [];
+
+      for (const line of pathLines) {
+        // Parse line like "1. /path/to/image.jpg"
+        const pathMatch = line.match(/^\d+\.\s+(.+)$/);
+        if (pathMatch) {
+          const fullPath = pathMatch[1];
+          // Extract timestamp and filename from path like /path/.tmp/images/1234567890/image_0.jpg
+          const pathParts = fullPath.match(/\.tmp\/images\/(\d+)\/(.+)$/);
+          if (pathParts) {
+            const [, timestamp, filename] = pathParts;
+            const url = `/api/project-images/${encodeURIComponent(projectName)}/${timestamp}/${filename}`;
+            images.push({
+              url: url,
+              path: fullPath,
+              name: filename
+            });
+          }
+        }
+      }
+
+      // Add images array to message if we found any
+      if (images.length > 0) {
+        return {
+          ...sdkMessage,
+          images: images
+        };
+      }
+    }
+  }
+
   return sdkMessage;
 }
 
@@ -350,18 +390,21 @@ function extractTokenBudget(resultMessage) {
  * @param {string} cwd - Working directory for temp file creation
  * @returns {Promise<Object>} {modifiedCommand, tempImagePaths, tempDir}
  */
-async function handleImages(command, images, cwd) {
+async function handleImages(command, images, cwd, projectName) {
   const tempImagePaths = [];
+  const imageUrls = [];
   let tempDir = null;
+  let timestamp = null;
 
   if (!images || images.length === 0) {
-    return { modifiedCommand: command, tempImagePaths, tempDir };
+    return { modifiedCommand: command, tempImagePaths, tempDir, imageUrls };
   }
 
   try {
     // Create temp directory in the project directory
     const workingDir = cwd || process.cwd();
-    tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
+    timestamp = Date.now().toString();
+    tempDir = path.join(workingDir, '.tmp', 'images', timestamp);
     await fs.mkdir(tempDir, { recursive: true });
 
     // Save each image to a temp file
@@ -381,6 +424,10 @@ async function handleImages(command, images, cwd) {
       // Write base64 data to file
       await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
       tempImagePaths.push(filepath);
+
+      // Generate URL for frontend access
+      const imageUrl = `/api/project-images/${encodeURIComponent(projectName)}/${timestamp}/${filename}`;
+      imageUrls.push(imageUrl);
     }
 
     // Include the full image paths in the prompt
@@ -391,10 +438,11 @@ async function handleImages(command, images, cwd) {
     }
 
     console.log(`📸 Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);
-    return { modifiedCommand, tempImagePaths, tempDir };
+    console.log(`🔗 Generated ${imageUrls.length} image URLs for frontend access`);
+    return { modifiedCommand, tempImagePaths, tempDir, imageUrls };
   } catch (error) {
     console.error('Error processing images for SDK:', error);
-    return { modifiedCommand: command, tempImagePaths, tempDir };
+    return { modifiedCommand: command, tempImagePaths, tempDir, imageUrls };
   }
 }
 
@@ -583,10 +631,12 @@ async function queryClaudeSDK(command, options: any = {}, ws) {
     }
 
     // Handle images - save to temp files and modify prompt
-    const imageResult = await handleImages(command, options.images, options.cwd);
+    const projectName = options.projectPath || 'unknown';
+    const imageResult = await handleImages(command, options.images, options.cwd, projectName);
     const finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
+    const imageUrls = imageResult.imageUrls || [];
 
     // Create canUseTool callback for permission handling
     const canUseTool = createCanUseTool(ws, capturedSessionId);
@@ -634,7 +684,7 @@ async function queryClaudeSDK(command, options: any = {}, ws) {
       }
 
       // Transform and send message to WebSocket
-      const transformedMessage = transformMessage(message);
+      const transformedMessage = transformMessage(message, projectName);
       const wsMessage = {
         type: 'claude-response',
         data: transformedMessage

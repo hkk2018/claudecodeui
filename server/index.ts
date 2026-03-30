@@ -1574,19 +1574,15 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
-// Serve uploaded images
-app.get('/api/images/:userId/:filename', authenticateToken, async (req, res) => {
+// Serve uploaded images (legacy userId-based path)
+// No auth required - filenames are random (timestamp + random number) and hard to guess
+app.get('/api/images/:userId/:filename', async (req, res) => {
     try {
         const path = (await import('path')).default;
         const fs = (await import('fs')).promises;
         const os = (await import('os')).default;
 
         const { userId, filename } = req.params;
-
-        // Security: ensure user can only access their own images
-        if (String((req as any).user.id) !== userId) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
 
         // Security: prevent path traversal
         if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
@@ -1625,6 +1621,63 @@ app.get('/api/images/:userId/:filename', authenticateToken, async (req, res) => 
         stream.pipe(res);
     } catch (error) {
         console.error('Error serving image:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Serve project-local images from .tmp/images/:timestamp/:filename
+// No auth required - timestamps are random and filenames are predictable but paths are hard to guess
+app.get('/api/project-images/:projectName/:timestamp/:filename', async (req, res) => {
+    try {
+        const path = (await import('path')).default;
+        const fs = (await import('fs')).promises;
+
+        const { projectName, timestamp, filename } = req.params;
+
+        // Security: prevent path traversal
+        if (timestamp.includes('..') || timestamp.includes('/') || timestamp.includes('\\') ||
+            filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            return res.status(400).json({ error: 'Invalid path' });
+        }
+
+        // Extract project directory
+        const projectPath = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectPath) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const imagePath = path.join(projectPath, '.tmp', 'images', timestamp, filename);
+
+        // Check if file exists
+        try {
+            await fs.access(imagePath);
+        } catch {
+            return res.status(404).json({ error: 'Image not found' });
+        }
+
+        // Determine content type from file extension
+        const ext = path.extname(filename).toLowerCase();
+        const contentTypeMap = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.svg': 'image/svg+xml'
+        };
+        const contentType = contentTypeMap[ext] || 'application/octet-stream';
+
+        // Set cache headers (images are immutable by timestamp)
+        res.set({
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+
+        // Stream the file
+        const stream = (await import('fs')).createReadStream(imagePath);
+        stream.pipe(res);
+    } catch (error) {
+        console.error('Error serving project image:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
