@@ -2921,6 +2921,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, []);
 
   // Handle scroll events to detect when user manually scrolls up and load more messages
+  const isReloadingRef = useRef(false); // Suppress auto-scroll during external message reload
   const handleScroll = useCallback(async () => {
     if (scrollContainerRef.current) {
       const container = scrollContainerRef.current;
@@ -3238,16 +3239,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               return converted;
             });
           } else {
+            // Suppress auto-scroll during reload to prevent scroll position jumping
+            isReloadingRef.current = true;
+
             // Reload Claude messages from API/JSONL
             const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
             setSessionMessages(messages);
-            // convertedMessages will be automatically updated via useMemo
 
-            // Smart scroll behavior: only auto-scroll if user is at the very bottom
-            if (isAtBottom() && autoScrollToBottom) {
-              setTimeout(() => scrollToBottom(), 200);
-            }
-            // If user scrolled up, preserve their position (they're reading history)
+            // After DOM settles, unlock and let scroll handler + auto-scroll work normally
+            setTimeout(() => {
+              isReloadingRef.current = false;
+              // If user is at bottom after reload, auto-scroll for future messages will resume naturally
+            }, 150);
           }
         } catch (error) {
           console.error('Error reloading messages from external update:', error);
@@ -4017,8 +4020,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [chatMessages, visibleMessageCount]);
 
   // Auto-scroll to bottom when new messages arrive, only if user is at the bottom
+  // Skip during external reload (isReloadingRef) to prevent scroll position jumping
   useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0 && !isUserScrolledUp.value) {
+    if (scrollContainerRef.current && chatMessages.length > 0 && !isUserScrolledUp.value && !isReloadingRef.current) {
       setTimeout(() => scrollToBottom(), 50);
     }
   }, [chatMessages.length, scrollToBottom]);
