@@ -161,7 +161,10 @@ function AppContent() {
 
             // Background reload: fetch latest messages and update cache immediately
             // This makes session switching instant - no loading spinner when user switches
-            (async () => {
+            // Skip in desktop mode - cards only update on Stop hook events
+            if (uiSettings.value.desktopMode) {
+              // Desktop mode: don't fetch on every file change, wait for hook events
+            } else (async () => {
               try {
                 const fetchLimit = uiSettings.value.desktopMode ? 2 : 20;
                 const response = await api.sessionMessages(projectName, changedSessionId, fetchLimit, 0);
@@ -202,18 +205,18 @@ function AppContent() {
       // Hook events from ~/.claude/settings.json hooks (Stop, Notification, etc.)
       // These are instant - no file watcher delay
       if (latestMessage.type === 'hook-event') {
-        const { event, sessionId: hookSessionId, projectName: hookProjectName } = latestMessage;
+        const { event, sessionId: hookSessionId, projectName: hookProjectName, message: hookMessage } = latestMessage;
 
-        // Desktop mode: play sound and trigger card refresh
+        // Desktop mode: play sound and trigger card refresh with message
         if (uiSettings.value.desktopMode && (event === 'Stop' || event === 'Notification' || event === 'PermissionRequest')) {
           playNotificationSound();
-          // Tell DesktopPanel to refresh cards
+          // Tell DesktopPanel to update the card directly with the message
           window.dispatchEvent(new CustomEvent('desktop-panel-refresh', {
-            detail: { sessionId: hookSessionId, projectName: hookProjectName }
+            detail: { sessionId: hookSessionId, projectName: hookProjectName, message: hookMessage, event }
           }));
         }
 
-        // Also update session cache if we have projectName and sessionId
+        // Also update session cache if we have projectName and sessionId (for normal mode)
         if (hookProjectName && hookSessionId && event === 'Stop') {
           (async () => {
             try {

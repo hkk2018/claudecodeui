@@ -171,7 +171,31 @@ export default function DesktopPanel({
     document.addEventListener('click', unlock);
 
     // Listen for hook-triggered refresh (instant, from Stop hook)
-    const handleRefresh = () => { fetchSessionCards(); };
+    const handleRefresh = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.message && detail?.projectName) {
+        // Update card directly with the message from hook — no fetch needed
+        setCards(prev => {
+          const idx = prev.findIndex(c => c.projectName === detail.projectName);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = {
+              ...updated[idx],
+              lastAssistantMessage: detail.message,
+              lastActivity: new Date().toISOString(),
+              isActive: detail.event === 'Stop' ? false : updated[idx].isActive,
+            };
+            return updated;
+          }
+          // Project not in cards yet — full refresh
+          fetchSessionCards();
+          return prev;
+        });
+      } else {
+        // No message in event — fallback to full refresh
+        fetchSessionCards();
+      }
+    };
     window.addEventListener('desktop-panel-refresh', handleRefresh);
 
     fetchSessionCards();

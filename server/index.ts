@@ -232,7 +232,7 @@ app.get('/health', (req, res) => {
 // Hook event endpoint (no auth - called from CLI hook scripts)
 // Receives events from ~/.claude/settings.json hooks and broadcasts via WebSocket
 // Input format matches Claude CLI hook input: { hook_event_name, session_id, transcript_path, cwd, message?, title? }
-app.post('/api/hook-event', (req, res) => {
+app.post('/api/hook-event', async (req, res) => {
   const body = req.body || {};
   const event = body.hook_event_name || body.event;
   if (!event) {
@@ -253,6 +253,36 @@ app.post('/api/hook-event', (req, res) => {
     }
   }
 
+  // For Stop events, read transcript to extract last assistant message
+  let lastAssistantMessage = null;
+  if (event === 'Stop' && body.transcript_path) {
+    try {
+      const transcriptContent = await fsPromises.readFile(body.transcript_path, 'utf-8');
+      const lines = transcriptContent.trim().split('\n');
+      // Read from end to find last assistant text message
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lines[i]);
+          if (entry.message?.role === 'assistant' && entry.message?.content) {
+            const content = entry.message.content;
+            if (Array.isArray(content)) {
+              const textBlock = [...content].reverse().find((b: any) => b.type === 'text' && b.text);
+              if (textBlock) {
+                lastAssistantMessage = textBlock.text;
+                break;
+              }
+            } else if (typeof content === 'string' && content) {
+              lastAssistantMessage = content;
+              break;
+            }
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn(`[HOOK] Failed to read transcript: ${(err as any).message}`);
+    }
+  }
+
   const hookMessage = JSON.stringify({
     type: 'hook-event',
     event,
@@ -260,7 +290,7 @@ app.post('/api/hook-event', (req, res) => {
     projectName,
     transcriptPath: body.transcript_path,
     cwd: body.cwd,
-    message: body.message,
+    message: body.message || lastAssistantMessage,
     title: body.title,
     timestamp: new Date().toISOString()
   });
@@ -271,7 +301,7 @@ app.post('/api/hook-event', (req, res) => {
     }
   });
 
-  console.log(`[HOOK] ${event} session=${body.session_id?.slice(0, 8) || '?'}`);
+  console.log(`[HOOK] ${event} session=${body.session_id?.slice(0, 8) || '?'}${lastAssistantMessage ? ' (with message)' : ''}`);
   res.json({ ok: true });
 });
 
