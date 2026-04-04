@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../utils/api';
 import { updateUiSettings } from '../stores/uiSettings';
 import { initNotificationSound } from '../utils/notificationSound';
-import { Monitor, RefreshCw, MessageSquare, Clock, ChevronRight, Square, ExternalLink } from 'lucide-react';
+import { Monitor, RefreshCw, MessageSquare, Clock, ChevronRight, Square, ExternalLink, ArrowLeft } from 'lucide-react';
 import { cn } from '../lib/utils';
 import IdeProjectBar from './IdeProjectBar';
 
@@ -228,13 +228,22 @@ export default function DesktopPanel({
             {cards.filter(c => c.isActive).length} active
           </span>
         </div>
-        <button
-          onClick={() => { setLoading(true); fetchSessionCards(); }}
-          className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => updateUiSettings({ desktopMode: false })}
+            className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
+            title="Back to message mode"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => { setLoading(true); fetchSessionCards(); }}
+            className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          </button>
+        </div>
       </div>
 
       {/* IDE Project Bar - simplified for desktop mode */}

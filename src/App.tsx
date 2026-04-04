@@ -889,25 +889,6 @@ function AppContent() {
       </>
       )}
 
-      {/* Quick Settings Panel - available in desktop mode too */}
-      {isDesktopMode && (
-        <QuickSettingsPanel
-          isOpen={showQuickSettings}
-          onToggle={setShowQuickSettings}
-          autoExpandTools={autoExpandTools}
-          onAutoExpandChange={setAutoExpandTools}
-          showRawParameters={showRawParameters}
-          onShowRawParametersChange={setShowRawParameters}
-          showThinking={showThinking}
-          onShowThinkingChange={setShowThinking}
-          autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={setAutoScrollToBottom}
-          sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={setSendByCtrlEnter}
-          isMobile={isMobile}
-        />
-      )}
-
       {/* Settings Modal */}
       <Settings
         isOpen={showSettings}
