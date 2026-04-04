@@ -176,15 +176,6 @@ function AppContent() {
                   // Update Session Store cache with latest messages
                   setSessionMessages(changedSessionId, messages, pagination);
                   console.log(`[BACKGROUND] ✅ Reloaded session ${changedSessionId.slice(0, 8)} (${messages.length} messages)`);
-
-                  // Desktop mode: play sound if last message is from assistant
-                  if (uiSettings.value.desktopMode && messages.length > 0) {
-                    const last = messages[messages.length - 1];
-                    const role = last.message?.role || last.role;
-                    if (role === 'assistant') {
-                      playNotificationSound();
-                    }
-                  }
                 }
               } catch (error) {
                 console.error('[BACKGROUND] Failed to reload session:', error);
@@ -205,6 +196,39 @@ function AppContent() {
         // Lightweight notifications (file-change only) skip this to avoid overwriting
         if (latestMessage.projects) {
           setProjects(latestMessage.projects);
+        }
+      }
+
+      // Hook events from ~/.claude/settings.json hooks (Stop, Notification, etc.)
+      // These are instant - no file watcher delay
+      if (latestMessage.type === 'hook-event') {
+        const { event, sessionId: hookSessionId, projectName: hookProjectName } = latestMessage;
+
+        // Desktop mode: play sound and trigger card refresh
+        if (uiSettings.value.desktopMode && (event === 'Stop' || event === 'Notification' || event === 'PermissionRequest')) {
+          playNotificationSound();
+          // Tell DesktopPanel to refresh cards
+          window.dispatchEvent(new CustomEvent('desktop-panel-refresh', {
+            detail: { sessionId: hookSessionId, projectName: hookProjectName }
+          }));
+        }
+
+        // Also update session cache if we have projectName and sessionId
+        if (hookProjectName && hookSessionId && event === 'Stop') {
+          (async () => {
+            try {
+              const response = await api.sessionMessages(hookProjectName, hookSessionId, 20, 0);
+              if (response.ok) {
+                const data = await response.json();
+                const msgs = data.messages || [];
+                setSessionMessages(hookSessionId, msgs, {
+                  offset: msgs.length,
+                  hasMore: data.hasMore ?? false,
+                  total: data.total ?? msgs.length,
+                });
+              }
+            } catch {}
+          })();
         }
       }
     }

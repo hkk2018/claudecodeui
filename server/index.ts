@@ -68,6 +68,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getProjectsBasic, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { installHooks } from './hooks/install.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, getSessionInfo, resolvePermissionRequest, getPendingPermissionsBySession, getAllSessionsStatus, getAllPendingPermissions, getDebugInfo, addDebugMessage, getDebugMessages } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
@@ -226,6 +227,52 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString()
   });
+});
+
+// Hook event endpoint (no auth - called from CLI hook scripts)
+// Receives events from ~/.claude/settings.json hooks and broadcasts via WebSocket
+// Input format matches Claude CLI hook input: { hook_event_name, session_id, transcript_path, cwd, message?, title? }
+app.post('/api/hook-event', (req, res) => {
+  const body = req.body || {};
+  const event = body.hook_event_name || body.event;
+  if (!event) {
+    return res.status(400).json({ error: 'hook_event_name required' });
+  }
+
+  // Extract projectName from transcript_path
+  // e.g. "/home/ubuntu/.claude/projects/-home-ubuntu-Projects-ken-onexas/abc123.jsonl"
+  let projectName = null;
+  let sessionIdFromPath = null;
+  if (body.transcript_path) {
+    const parts = body.transcript_path.split('/');
+    const jsonlFile = parts[parts.length - 1]; // abc123.jsonl
+    const projectDir = parts[parts.length - 2]; // -home-ubuntu-Projects-ken-onexas
+    if (jsonlFile?.endsWith('.jsonl')) {
+      sessionIdFromPath = jsonlFile.replace('.jsonl', '');
+      projectName = projectDir;
+    }
+  }
+
+  const hookMessage = JSON.stringify({
+    type: 'hook-event',
+    event,
+    sessionId: body.session_id || sessionIdFromPath,
+    projectName,
+    transcriptPath: body.transcript_path,
+    cwd: body.cwd,
+    message: body.message,
+    title: body.title,
+    timestamp: new Date().toISOString()
+  });
+
+  connectedClients.forEach(client => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      client.send(hookMessage);
+    }
+  });
+
+  console.log(`[HOOK] ${event} session=${body.session_id?.slice(0, 8) || '?'}`);
+  res.json({ ok: true });
 });
 
 // Optional API key validation (if configured)
@@ -2047,6 +2094,9 @@ async function startServer() {
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
+
+            // Install Claude CLI hooks for real-time event notifications
+            await installHooks(appInstallPath);
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();

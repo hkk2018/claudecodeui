@@ -170,11 +170,16 @@ export default function DesktopPanel({
     const unlock = () => { initNotificationSound(); document.removeEventListener('click', unlock); };
     document.addEventListener('click', unlock);
 
+    // Listen for hook-triggered refresh (instant, from Stop hook)
+    const handleRefresh = () => { fetchSessionCards(); };
+    window.addEventListener('desktop-panel-refresh', handleRefresh);
+
     fetchSessionCards();
     intervalRef.current = setInterval(fetchSessionCards, 30000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       document.removeEventListener('click', unlock);
+      window.removeEventListener('desktop-panel-refresh', handleRefresh);
     };
   }, [fetchSessionCards]);
 
