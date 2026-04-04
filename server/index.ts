@@ -283,6 +283,14 @@ app.post('/api/hook-event', async (req, res) => {
     }
   }
 
+  // Build message content based on event type
+  let messageContent = body.message || lastAssistantMessage;
+  if (event === 'PermissionRequest' && !messageContent) {
+    // PermissionRequest: compose message from tool info
+    const toolName = body.tool_name || 'unknown tool';
+    messageContent = `Permission required: ${toolName}`;
+  }
+
   const hookMessage = JSON.stringify({
     type: 'hook-event',
     event,
@@ -290,7 +298,8 @@ app.post('/api/hook-event', async (req, res) => {
     projectName,
     transcriptPath: body.transcript_path,
     cwd: body.cwd,
-    message: body.message || lastAssistantMessage,
+    message: messageContent,
+    toolName: body.tool_name,
     title: body.title,
     timestamp: new Date().toISOString()
   });
