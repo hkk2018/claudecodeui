@@ -29,6 +29,8 @@ import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 import DebugPanel from './components/DebugPanel';
 import { clearSession, setSessionMessages } from './stores/sessionSignals';
+import { uiSettings, updateUiSettings } from './stores/uiSettings';
+import DesktopPanel from './components/DesktopPanel';
 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -39,6 +41,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
 import { api, authenticatedFetch } from './utils/api';
+import { playNotificationSound } from './utils/notificationSound';
 import type { Project, Session, FileUpdate, GitHubNotification } from './types';
 
 // Extend Navigator interface to include standalone property
@@ -161,7 +164,8 @@ function AppContent() {
             // This makes session switching instant - no loading spinner when user switches
             (async () => {
               try {
-                const response = await api.sessionMessages(projectName, changedSessionId, 100, 0);
+                const fetchLimit = uiSettings.value.desktopMode ? 2 : 20;
+                const response = await api.sessionMessages(projectName, changedSessionId, fetchLimit, 0);
                 if (response.ok) {
                   const data = await response.json();
                   const messages = data.messages || [];
@@ -173,6 +177,15 @@ function AppContent() {
                   // Update Session Store cache with latest messages
                   setSessionMessages(changedSessionId, messages, pagination);
                   console.log(`[BACKGROUND] ✅ Reloaded session ${changedSessionId.slice(0, 8)} (${messages.length} messages)`);
+
+                  // Desktop mode: play sound if last message is from assistant
+                  if (uiSettings.value.desktopMode && messages.length > 0) {
+                    const last = messages[messages.length - 1];
+                    const role = last.message?.role || last.role;
+                    if (role === 'assistant') {
+                      playNotificationSound();
+                    }
+                  }
                 }
               } catch (error) {
                 console.error('[BACKGROUND] Failed to reload session:', error);
@@ -641,11 +654,26 @@ function AppContent() {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  const isDesktopMode = uiSettings.value.desktopMode;
+
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
-      {/* IDE Project Bar - top level, spans full width */}
+      {/* Desktop Mode: show DesktopPanel instead of normal layout */}
+      {isDesktopMode ? (
+        <DesktopPanel
+          projects={projects}
+          onSessionSelect={(session, project) => {
+            // Switch to normal mode and navigate to the session
+            updateUiSettings({ desktopMode: false });
+            handleProjectSelect(project);
+            handleSessionSelect(session, project);
+          }}
+          onProjectSelect={handleProjectSelect}
+        />
+      ) : (
+      <>
+      {/* IDE Project Bar - only in normal mode */}
       <IdeProjectBar />
-
       {/* Main layout: sidebar + content */}
       <div className="flex-1 flex min-h-0">
       {/* Fixed Desktop Sidebar */}
@@ -840,7 +868,7 @@ function AppContent() {
           isInputFocused={isInputFocused}
         />
       )}
-      {/* Quick Settings Panel - Only show on chat tab */}
+      {/* Quick Settings Panel - only on chat tab in normal mode */}
       {activeTab === 'chat' && (
         <QuickSettingsPanel
           isOpen={showQuickSettings}
@@ -860,6 +888,27 @@ function AppContent() {
       )}
 
       </div>{/* End main layout flex row */}
+      </>
+      )}
+
+      {/* Quick Settings Panel - available in desktop mode too */}
+      {isDesktopMode && (
+        <QuickSettingsPanel
+          isOpen={showQuickSettings}
+          onToggle={setShowQuickSettings}
+          autoExpandTools={autoExpandTools}
+          onAutoExpandChange={setAutoExpandTools}
+          showRawParameters={showRawParameters}
+          onShowRawParametersChange={setShowRawParameters}
+          showThinking={showThinking}
+          onShowThinkingChange={setShowThinking}
+          autoScrollToBottom={autoScrollToBottom}
+          onAutoScrollChange={setAutoScrollToBottom}
+          sendByCtrlEnter={sendByCtrlEnter}
+          onSendByCtrlEnterChange={setSendByCtrlEnter}
+          isMobile={isMobile}
+        />
+      )}
 
       {/* Settings Modal */}
       <Settings

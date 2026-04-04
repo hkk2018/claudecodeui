@@ -13,6 +13,7 @@ const loadUiSettings = () => {
   return {
     showIdeProjectBar: true, // Default: show IDE project bar
     showOverlayButton: true,  // Default: show overlay launch button
+    desktopMode: false, // Default: normal message mode
   };
 };
 

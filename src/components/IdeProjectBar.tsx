@@ -2,7 +2,7 @@ import { useSignal, useSignalEffect } from '@preact/signals-react';
 import { api } from '../utils/api';
 import { uiSettings, updateUiSettings } from '../stores/uiSettings';
 
-export default function IdeProjectBar() {
+export default function IdeProjectBar({ desktopMode = false }: { desktopMode?: boolean } = {}) {
   const projects = useSignal([]);
   const loading = useSignal(false);
   const error = useSignal(null);
@@ -55,12 +55,53 @@ export default function IdeProjectBar() {
     fetchProjects();
   });
 
-  // Hidden via settings
-  if (!uiSettings.value.showIdeProjectBar) {
+  // Hidden via settings (only in normal mode)
+  if (!desktopMode && !uiSettings.value.showIdeProjectBar) {
     return null;
   }
 
-  // Collapsed state: just show a thin bar with expand button
+  // Desktop mode: simplified layout, no collapse/hide, bigger tags
+  if (desktopMode) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b border-border">
+        {/* Project buttons - bigger */}
+        <div className="flex gap-2 flex-1 overflow-x-auto scrollbar-hide">
+          {loading.value && projects.value.length === 0 ? (
+            <span className="text-sm text-muted-foreground">Loading...</span>
+          ) : error.value ? (
+            <span className="text-sm text-destructive">Error loading IDE windows</span>
+          ) : projects.value.length === 0 ? (
+            <span className="text-sm text-muted-foreground">No IDE windows</span>
+          ) : (
+            projects.value.map((project) => (
+              <button
+                key={project.window_id}
+                onClick={() => handleFocus(project.window_id)}
+                className="px-3 py-1.5 text-sm bg-background hover:bg-primary/10 border border-border hover:border-primary rounded-md transition-colors flex-shrink-0"
+                title={project.window_title}
+              >
+                {project.project_name}
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Refresh only */}
+        <button
+          onClick={fetchProjects}
+          className="p-1.5 text-muted-foreground hover:text-foreground rounded transition-colors flex-shrink-0"
+          disabled={loading.value}
+          title="Refresh IDE windows"
+        >
+          <svg className={`w-4 h-4 ${loading.value ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
+  // Normal mode: original layout with collapse/hide
   if (collapsed.value) {
     return (
       <div className="flex items-center justify-between px-2 py-0.5 bg-muted/50 border-b border-border">
