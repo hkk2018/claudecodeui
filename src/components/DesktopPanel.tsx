@@ -183,7 +183,7 @@ export default function DesktopPanel({
     e.stopPropagation();
     setFocusingProject(card.projectName);
     try {
-      const res = await api.overlay.focusIdeByName(card.projectDisplayName);
+      const res = await api.overlay.focusIdeByName(card.projectName);
       const data = await res.json();
       setFocusResult(prev => ({ ...prev, [card.projectName]: data.success ? 'success' : 'error' }));
     } catch {
