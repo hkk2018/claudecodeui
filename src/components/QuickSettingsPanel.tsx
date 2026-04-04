@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Maximize2, 
-  Eye, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Eye,
   Settings2,
   Moon,
   Sun,
@@ -12,10 +12,12 @@ import {
   Brain,
   Sparkles,
   FileText,
-  Languages
+  Languages,
+  Monitor
 } from 'lucide-react';
 import DarkModeToggle from './DarkModeToggle';
 import { useTheme } from '../contexts/ThemeContext';
+import { uiSettings, updateUiSettings } from '../stores/uiSettings';
 
 const QuickSettingsPanel = ({
   isOpen,
@@ -97,6 +99,19 @@ const QuickSettingsPanel = ({
                 </span>
                 <DarkModeToggle />
               </div>
+
+              <label className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600">
+                <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
+                  <Monitor className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                  Desktop Mode
+                </span>
+                <input
+                  type="checkbox"
+                  checked={uiSettings.value.desktopMode || false}
+                  onChange={(e) => updateUiSettings({ desktopMode: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
+                />
+              </label>
             </div>
 
             {/* Tool Display Settings */}

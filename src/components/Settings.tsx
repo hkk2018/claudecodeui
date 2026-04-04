@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, RefreshCw } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, RefreshCw, Monitor } from 'lucide-react';
+import { uiSettings, updateUiSettings } from '../stores/uiSettings';
 import { useTheme } from '../contexts/ThemeContext';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
@@ -852,6 +853,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
                 }`}
               >
                 About
+              </button>
+              <button
+                onClick={() => setActiveTab('display')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                  activeTab === 'display'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Monitor className="w-4 h-4 inline mr-2" />
+                Display
               </button>
             </div>
           </div>
@@ -2438,6 +2450,103 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools', showFl
                           {import.meta.env.MODE}
                         </span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Display Tab */}
+            {activeTab === 'display' && (
+              <div className="space-y-6 md:space-y-8">
+                {/* Desktop Mode */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-foreground">Display Mode</h3>
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground flex items-center gap-2">
+                          <Monitor className="w-4 h-4" />
+                          Desktop Mode
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Switch to a desktop-optimized view showing session status cards with Claude's latest responses. Hides the chat interface and sidebar.
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => updateUiSettings({ desktopMode: !uiSettings.value.desktopMode })}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 flex-shrink-0 ml-4"
+                        role="switch"
+                        aria-checked={uiSettings.value.desktopMode || false}
+                        aria-label="Toggle desktop mode"
+                      >
+                        <span className="sr-only">Toggle desktop mode</span>
+                        <span
+                          className={`${
+                            uiSettings.value.desktopMode ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* IDE Project Bar */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-foreground">IDE Integration</h3>
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          IDE Project Bar
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Show the IDE project quick-switch bar at the top
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => updateUiSettings({ showIdeProjectBar: !uiSettings.value.showIdeProjectBar })}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 flex-shrink-0 ml-4"
+                        role="switch"
+                        aria-checked={uiSettings.value.showIdeProjectBar || false}
+                        aria-label="Toggle IDE project bar"
+                      >
+                        <span className="sr-only">Toggle IDE project bar</span>
+                        <span
+                          className={`${
+                            uiSettings.value.showIdeProjectBar ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          Overlay Launch Button
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Show button to launch the always-on-top overlay window
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => updateUiSettings({ showOverlayButton: !uiSettings.value.showOverlayButton })}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 flex-shrink-0 ml-4"
+                        role="switch"
+                        aria-checked={uiSettings.value.showOverlayButton || false}
+                        aria-label="Toggle overlay button"
+                      >
+                        <span className="sr-only">Toggle overlay button</span>
+                        <span
+                          className={`${
+                            uiSettings.value.showOverlayButton ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                        />
+                      </button>
                     </div>
                   </div>
                 </div>
