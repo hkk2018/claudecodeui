@@ -23,7 +23,6 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from '
 import { Settings as SettingsIcon, Sparkles, Bug } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
-import IdeProjectBar from './components/IdeProjectBar';
 import MobileNav from './components/MobileNav';
 import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
@@ -666,14 +665,13 @@ function AppContent() {
             // Switch to normal mode and navigate to the session
             updateUiSettings({ desktopMode: false });
             handleProjectSelect(project);
-            handleSessionSelect(session, project);
+            handleSessionSelect(session);
           }}
           onProjectSelect={handleProjectSelect}
         />
       ) : (
       <>
-      {/* IDE Project Bar - only in normal mode */}
-      <IdeProjectBar />
+      {/* No IDE Project Bar in normal mode - only shown inside DesktopPanel */}
       {/* Main layout: sidebar + content */}
       <div className="flex-1 flex min-h-0">
       {/* Fixed Desktop Sidebar */}
