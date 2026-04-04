@@ -1787,9 +1787,19 @@ app.get('/api/cli/claude/usage', authenticateToken, async (req, res) => {
 
     let output = '';
     let trustDone = false;
+    let cliReady = false;
     let usageSent = false;
     let usageFound = false;
+    let responded = false;
     let timeoutId;
+
+    // Strip ANSI escape sequences: cursor movement codes (\x1b[1C etc.) become spaces, others are removed
+    const stripAnsi = (text) => text
+      .replace(/\x1b\[\d*[ABCD]/g, ' ')      // cursor movement → space (CLI uses these as word separators)
+      .replace(/\x1b\[[\d;?]*[a-zA-Z]/g, '') // other CSI sequences → remove
+      .replace(/\x1b[()][A-Z0-9]/g, '')      // charset sequences → remove
+      .replace(/\x1b\][^\x07]*\x07/g, '')    // OSC sequences → remove
+      .replace(/\x1b\[>[^\x1b]*?[a-zA-Z]/g, ''); // private mode sequences like \x1b[>0q → remove
 
     const cleanup = () => {
       clearTimeout(timeoutId);
@@ -1798,15 +1808,21 @@ app.get('/api/cli/claude/usage', authenticateToken, async (req, res) => {
       } catch (e) {}
     };
 
+    const sendResponse = (usage, partial = false) => {
+      if (responded) return;
+      responded = true;
+      cleanup();
+      res.json({ success: true, usage, ...(partial ? { partial: true } : {}) });
+    };
+
     const parseUsage = (text) => {
-      // Strip ANSI codes
-      const clean = text.replace(/\x1b\[[0-9;]*[mGKHJ]/g, '').replace(/\[[\d;?]*[a-zA-Z]/g, '');
+      const clean = stripAnsi(text);
 
       // Parse usage percentages and reset times
-      const sessionMatch = clean.match(/Current session[\s\S]*?(\d+)%\s*used[\s\S]*?Resets\s+([^\n]+)/);
-      const weekAllMatch = clean.match(/Current week \(all models\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets\s+([^\n]+)/);
-      const weekSonnetMatch = clean.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets\s+([^\n]+)/);
-      const extraUsageMatch = clean.match(/Extra usage\s*([\s\S]*?)(?:\n\n|Nov|\n[A-Z])/);
+      const sessionMatch = clean.match(/Current session[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+)/);
+      const weekAllMatch = clean.match(/Current week \(all models\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+)/);
+      const weekSonnetMatch = clean.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+)/);
+      const extraUsageMatch = clean.match(/Extra usage\s*\n([\s\S]*?)(?:\n\n|\nEsc|\n[A-Z])/);
 
       return {
         session: sessionMatch ? {
@@ -1827,18 +1843,29 @@ app.get('/api/cli/claude/usage', authenticateToken, async (req, res) => {
 
     ptyProcess.onData((data) => {
       output += data;
+      // Use ANSI-stripped accumulated output for reliable detection
+      const cleanOutput = stripAnsi(output);
 
-      // Accept trust prompt when we see it
-      if (data.includes('trust the files') && !trustDone) {
+      // Accept trust prompt (CLI inserts ANSI cursor codes between words, so check stripped text)
+      if (!trustDone && (cleanOutput.includes('you trust') || cleanOutput.includes('trust the files') || cleanOutput.includes('I trust this folder'))) {
         trustDone = true;
         setTimeout(() => ptyProcess.write('\r'), 500);
         return;
       }
 
+      // Detect CLI ready: "shift+tab" appears in the bottom status bar when input is ready
+      if (!cliReady && (data.includes('shift+tab') || cleanOutput.includes('shift+tab'))) {
+        cliReady = true;
+        // Type /usage once CLI is ready
+        if (!usageSent) {
+          usageSent = true;
+          setTimeout(() => ptyProcess.write('/usage'), 500);
+        }
+      }
+
       // When menu appears, select /usage with Enter
-      if (data.includes('/usage') && data.includes('Show plan usage') && !usageSent) {
-        usageSent = true;
-        setTimeout(() => ptyProcess.write('\r'), 200);
+      if (usageSent && (data.includes('Show plan usage') || cleanOutput.includes('Show plan usage'))) {
+        setTimeout(() => ptyProcess.write('\r'), 300);
       }
 
       // Check for usage data
@@ -1846,31 +1873,35 @@ app.get('/api/cli/claude/usage', authenticateToken, async (req, res) => {
         usageFound = true;
       }
 
-      // When we have all data, parse and respond
-      if (usageFound && data.includes('Esc to exit')) {
-        cleanup();
-        const usage = parseUsage(output);
-        res.json({ success: true, usage });
+      // When we have usage data, check current chunk (not accumulated) for Esc signal to avoid
+      // matching the Esc from earlier trust prompt. Also check stripped current chunk.
+      if (usageFound) {
+        const cleanChunk = stripAnsi(data);
+        if (cleanChunk.includes('Esc to cancel') || cleanChunk.includes('Esc to exit') ||
+            data.includes('Esc to cancel') || data.includes('Esc to exit')) {
+          sendResponse(parseUsage(output));
+        }
       }
     });
 
-    // Send /usage command after CLI loads
+    // Fallback: if CLI ready signal not detected after 8s, try typing /usage anyway
     setTimeout(() => {
-      ptyProcess.write('/usage');
-    }, 5000);
+      if (!usageSent) {
+        usageSent = true;
+        ptyProcess.write('/usage');
+      }
+    }, 8000);
 
-    // Timeout after 20 seconds
+    // Timeout after 25 seconds
     timeoutId = setTimeout(() => {
-      cleanup();
-
-      // Try to parse whatever we got
       if (usageFound) {
-        const usage = parseUsage(output);
-        res.json({ success: true, usage, partial: true });
-      } else {
+        sendResponse(parseUsage(output), true);
+      } else if (!responded) {
+        responded = true;
+        cleanup();
         res.status(500).json({ error: 'Timeout waiting for usage data' });
       }
-    }, 20000);
+    }, 25000);
 
   } catch (error) {
     console.error('Error getting Claude usage:', error);
