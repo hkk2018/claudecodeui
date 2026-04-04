@@ -15,6 +15,7 @@ interface SessionCard {
   lastAssistantMessage: string;
   isActive: boolean;
   messageCount: number;
+  pendingPermission: boolean;
 }
 
 // Extract text content from a message's content field
@@ -142,6 +143,7 @@ export default function DesktopPanel({
             lastAssistantMessage,
             isActive: diffInMinutes < 10,
             messageCount: latestSession.messageCount || 0,
+            pendingPermission: false,
           } as SessionCard;
         } catch {
           return null;
@@ -173,7 +175,7 @@ export default function DesktopPanel({
     // Listen for hook-triggered refresh (instant, from Stop hook)
     const handleRefresh = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.message && detail?.projectName) {
+      if (detail?.projectName && (detail?.message || detail?.event === 'PermissionRequest')) {
         // Update card directly with the message from hook — no fetch needed
         setCards(prev => {
           const idx = prev.findIndex(c => c.projectName === detail.projectName);
@@ -181,9 +183,10 @@ export default function DesktopPanel({
             const updated = [...prev];
             updated[idx] = {
               ...updated[idx],
-              lastAssistantMessage: detail.message,
+              lastAssistantMessage: detail.message || updated[idx].lastAssistantMessage,
               lastActivity: new Date().toISOString(),
               isActive: detail.event === 'Stop' ? false : updated[idx].isActive,
+              pendingPermission: detail.event === 'PermissionRequest',
             };
             return updated;
           }
@@ -296,7 +299,9 @@ export default function DesktopPanel({
                 key={`${card.projectName}-${card.sessionId}`}
                 className={cn(
                   "flex rounded-lg border bg-card overflow-hidden transition-all duration-150",
-                  card.isActive
+                  card.pendingPermission
+                    ? "border-red-500/50 bg-red-50/5 dark:bg-red-900/10 border-2"
+                    : card.isActive
                     ? "border-green-500/30 bg-green-50/5 dark:bg-green-900/5"
                     : "border-border"
                 )}
