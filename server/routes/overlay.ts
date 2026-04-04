@@ -183,9 +183,13 @@ router.post('/ide-projects/focus-by-name', async (req, res) => {
                     const extracted = extractProjectName(name, editorType);
                     const extractedLower = extracted.toLowerCase();
 
-                    // Match: exact match, or projectName ends with "-extractedName"
+                    // Match: exact match, endsWith, or dot-prefix folder (e.g. .claude → --claude)
                     // e.g. "-home-ubuntu-Projects-ken-diadosis-docs" ends with "-diadosis-docs"
-                    if (extractedLower === projectNameLower || projectNameLower.endsWith('-' + extractedLower)) {
+                    // e.g. "-home-ubuntu--claude" ends with "--claude" for ".claude"
+                    const dotStripped = extractedLower.startsWith('.') ? extractedLower.slice(1) : null;
+                    if (extractedLower === projectNameLower
+                        || projectNameLower.endsWith('-' + extractedLower)
+                        || (dotStripped && projectNameLower.endsWith('-' + dotStripped))) {
                         await execAsync(`xdotool windowactivate ${wid}`, { env, timeout: 2000 });
                         return res.json({ success: true, windowId: wid, projectName: extracted });
                     }
