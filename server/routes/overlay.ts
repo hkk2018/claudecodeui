@@ -158,12 +158,12 @@ router.post('/ide-projects/focus-by-name', async (req, res) => {
         vscode: { window_class: 'Code' },
     };
 
-    // Extract folder name from path-style project names like "-home-ubuntu-Projects-ken-onexas"
+    // Match project names flexibly
+    // projectName can be path-style: "-home-ubuntu-Projects-ken-diadosis-docs"
+    // IDE window extracted name can be: "diadosis-docs"
+    // Problem: "-" is both path separator and part of folder names, so we can't reliably parse.
+    // Strategy: check if the extracted window name appears at the END of the projectName
     const projectNameLower = projectName.toLowerCase();
-    const folderName = projectName.split('-').pop().toLowerCase();
-    // Also try converting path format back: "-home-ubuntu-Projects-ken-onexas" -> "onexas"
-    const pathParts = projectName.replace(/^-/, '').split('-');
-    const lastFolder = pathParts[pathParts.length - 1]?.toLowerCase();
 
     for (const [editorType, { window_class }] of Object.entries(builtinEditors)) {
         try {
@@ -183,7 +183,9 @@ router.post('/ide-projects/focus-by-name', async (req, res) => {
                     const extracted = extractProjectName(name, editorType);
                     const extractedLower = extracted.toLowerCase();
 
-                    if (extractedLower === projectNameLower || extractedLower === folderName || extractedLower === lastFolder) {
+                    // Match: exact match, or projectName ends with "-extractedName"
+                    // e.g. "-home-ubuntu-Projects-ken-diadosis-docs" ends with "-diadosis-docs"
+                    if (extractedLower === projectNameLower || projectNameLower.endsWith('-' + extractedLower)) {
                         await execAsync(`xdotool windowactivate ${wid}`, { env, timeout: 2000 });
                         return res.json({ success: true, windowId: wid, projectName: extracted });
                     }
