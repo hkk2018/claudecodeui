@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../utils/api';
 import { updateUiSettings } from '../stores/uiSettings';
 import { initNotificationSound } from '../utils/notificationSound';
-import { Monitor, RefreshCw, MessageSquare, Clock, ChevronRight, Square, ExternalLink, ArrowLeft } from 'lucide-react';
+import { Monitor, RefreshCw, Clock, ChevronRight, Square, ExternalLink, ArrowLeft } from 'lucide-react';
 import { cn } from '../lib/utils';
 import IdeProjectBar from './IdeProjectBar';
 import ReactMarkdown from 'react-markdown';
@@ -33,27 +33,16 @@ function extractTextFromContent(content: any): string {
 }
 
 // Clean markdown for preview display
-function cleanMarkdown(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/```[\s\S]*?```/g, '[code]')
-    .replace(/`[^`]+`/g, '[code]')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/#{1,6}\s/g, '')
-    .trim();
-}
-
-// Show first N lines + ... + last N lines (like GTK version)
+// Show first N lines + ... + last N lines, preserving Markdown syntax
 function truncateLines(text: string, headLines = 5, tailLines = 5): string {
-  const cleaned = cleanMarkdown(text);
-  const lines = cleaned.split('\n').filter(l => l.trim());
+  if (!text) return '';
+  const lines = text.split('\n').filter(l => l.trim());
   if (lines.length <= headLines + tailLines) {
     return lines.join('\n');
   }
   const head = lines.slice(0, headLines).join('\n');
   const tail = lines.slice(-tailLines).join('\n');
-  return `${head}\n... (${lines.length - headLines - tailLines} lines omitted) ...\n${tail}`;
+  return `${head}\n\n... (${lines.length - headLines - tailLines} lines omitted) ...\n\n${tail}`;
 }
 
 // Format time as HH:MM
