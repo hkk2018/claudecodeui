@@ -5,6 +5,8 @@ import { initNotificationSound } from '../utils/notificationSound';
 import { Monitor, RefreshCw, MessageSquare, Clock, ChevronRight, Square, ExternalLink, ArrowLeft } from 'lucide-react';
 import { cn } from '../lib/utils';
 import IdeProjectBar from './IdeProjectBar';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface SessionCard {
   projectName: string;
@@ -68,6 +70,8 @@ function getTimeColor(dateString: string): string {
   if (diffMins < 20) return 'text-orange-400';
   return 'text-muted-foreground';
 }
+
+const remarkGfmPlugins = [remarkGfm];
 
 export default function DesktopPanel({
   projects,
@@ -342,9 +346,11 @@ export default function DesktopPanel({
                   </div>
 
                   {/* Message body */}
-                  <div className="text-sm text-muted-foreground leading-relaxed mb-2 whitespace-pre-line select-text">
+                  <div className="text-sm text-muted-foreground leading-relaxed mb-2 select-text prose prose-sm dark:prose-invert prose-p:my-1 prose-pre:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-1 max-w-none">
                     {card.lastAssistantMessage ? (
-                      truncateLines(card.lastAssistantMessage, 5, 5)
+                      <ReactMarkdown remarkPlugins={remarkGfmPlugins}>
+                        {truncateLines(card.lastAssistantMessage, 5, 5)}
+                      </ReactMarkdown>
                     ) : (
                       <span className="italic text-muted-foreground/60">No message</span>
                     )}
