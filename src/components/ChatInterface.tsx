@@ -3733,11 +3733,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
 
-          // Store session ID for future use and trigger refresh (for new sessions)
-          const pendingCursorSessionId = sessionStorage.getItem('pendingSessionId');
-          if (cursorCompletedSessionId && !selectedSession?.id && cursorCompletedSessionId === pendingCursorSessionId) {
-            sessionStorage.removeItem('pendingSessionId');
-
+          // Trigger refresh if this is a new session
+          if (cursorCompletedSessionId && selectedSession?.id === cursorCompletedSessionId) {
             // Trigger a project refresh to update the sidebar with the new session
             if (window.refreshProjects) {
               setTimeout(() => window.refreshProjects(), 500);
@@ -3778,7 +3775,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
         case 'claude-complete':
           // Get session ID from message or fall back to current session
-          const completedSessionId = latestMessage.sessionId || selectedSession?.id || sessionStorage.getItem('pendingSessionId');
+          const completedSessionId = latestMessage.sessionId || selectedSession?.id;
           console.log('🏁 claude-complete received:', { completedSessionId, selectedSessionId: selectedSession?.id, match: completedSessionId === selectedSession?.id });
 
           // Clear processing state via signals
@@ -3810,15 +3807,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
 
-          // If we have a pending session ID and the conversation completed successfully, use it
-          const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-          if (pendingSessionId && !selectedSession?.id && latestMessage.exitCode === 0) {
-            sessionStorage.removeItem('pendingSessionId');
-
-            // No need to manually refresh - projects_updated WebSocket message will handle it
-            console.log('✅ New session complete, ID set to:', pendingSessionId);
-          }
-          
           // Clear persisted chat messages after successful completion
           if (latestMessage.exitCode === 0) {
             const completedId = latestMessage.sessionId || selectedSession?.id;
