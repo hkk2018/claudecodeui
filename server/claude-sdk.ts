@@ -515,8 +515,8 @@ async function loadMcpConfig(cwd) {
     }
 
     // Add/override with project-specific MCP servers
-    if (claudeConfig.claudeProjects && cwd) {
-      const projectConfig = claudeConfig.claudeProjects[cwd];
+    if (claudeConfig.projects && cwd) {
+      const projectConfig = claudeConfig.projects[cwd];
       if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
         mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
         console.log(`📡 Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
@@ -529,8 +529,31 @@ async function loadMcpConfig(cwd) {
       return null;
     }
 
-    console.log(`✅ Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
-    return mcpServers;
+    // Transform MCP server configs from Claude Code format to SDK format
+    // Claude Code format: { type: "stdio", command: "...", args: [...], env: {...} }
+    // SDK format: { command: "...", args: [...], env: {...} }
+    const transformedServers = {};
+    for (const [name, config] of Object.entries(mcpServers)) {
+      if (typeof config === 'object' && config !== null) {
+        const transformed: any = {
+          command: (config as any).command
+        };
+
+        // Add optional fields if they exist
+        if ((config as any).args) {
+          transformed.args = (config as any).args;
+        }
+        if ((config as any).env) {
+          transformed.env = (config as any).env;
+        }
+
+        transformedServers[name] = transformed;
+        console.log(`📡 Transformed MCP server: ${name} -> command: ${transformed.command}`);
+      }
+    }
+
+    console.log(`✅ Total MCP servers loaded: ${Object.keys(transformedServers).length}`);
+    return transformedServers;
   } catch (error) {
     console.error('❌ Error loading MCP config:', error.message);
     return null;
