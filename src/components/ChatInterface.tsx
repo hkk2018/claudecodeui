@@ -3357,11 +3357,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
-          // Store it temporarily until conversation completes (prevents premature session association)
+          // Navigate to the new session immediately so subsequent messages use the correct session ID
           if (latestMessage.sessionId && !selectedSession?.id) {
-            sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+            console.log('🆕 New session created, navigating to:', latestMessage.sessionId);
             // Update signal with the new session ID
             switchToSession(latestMessage.sessionId);
+            // Navigate to the session (this will set selectedSession and update URL)
+            if (onNavigateToSession) {
+              onNavigateToSession(latestMessage.sessionId);
+            }
           }
           break;
 
