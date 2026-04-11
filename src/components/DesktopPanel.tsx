@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../utils/api';
 import { updateUiSettings } from '../stores/uiSettings';
 import { initNotificationSound } from '../utils/notificationSound';
-import { Monitor, RefreshCw, Clock, ChevronRight, Square, ExternalLink, ArrowLeft } from 'lucide-react';
+import { Monitor, RefreshCw, Clock, ChevronRight, Square, ExternalLink, ArrowLeft, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import IdeProjectBar from './IdeProjectBar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import ClaudeUsageModal from './ClaudeUsageModal';
+import GeminiAssistant from './GeminiAssistant';
 
 interface SessionCard {
   projectName: string;
@@ -75,6 +77,7 @@ export default function DesktopPanel({
   const [loading, setLoading] = useState(true);
   const [focusingProject, setFocusingProject] = useState<string | null>(null);
   const [focusResult, setFocusResult] = useState<Record<string, 'success' | 'error'>>({});
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchSessionCards = useCallback(async () => {
@@ -242,6 +245,15 @@ export default function DesktopPanel({
     }
   };
 
+  // Prepare session data for Gemini Assistant
+  const sessionData = cards.map(card => ({
+    projectName: card.projectName,
+    sessionId: card.sessionId,
+    lastActivity: card.lastActivity,
+    messageCount: card.messageCount,
+    isActive: card.isActive,
+  }));
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
       {/* Header */}
@@ -254,6 +266,13 @@ export default function DesktopPanel({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsUsageModalOpen(true)}
+            className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
+            title="Claude Usage"
+          >
+            <Zap className="w-4 h-4" />
+          </button>
           <button
             onClick={() => updateUiSettings({ desktopMode: false })}
             className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
@@ -387,6 +406,15 @@ export default function DesktopPanel({
           </div>
         )}
       </div>
+
+      {/* Claude Usage Modal */}
+      <ClaudeUsageModal
+        isOpen={isUsageModalOpen}
+        onClose={() => setIsUsageModalOpen(false)}
+      />
+
+      {/* Gemini AI Assistant */}
+      <GeminiAssistant sessions={sessionData} />
     </div>
   );
 }

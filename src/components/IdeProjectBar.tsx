@@ -77,10 +77,10 @@ export default function IdeProjectBar({ desktopMode = false }: { desktopMode?: b
               <button
                 key={project.window_id}
                 onClick={() => handleFocus(project.window_id)}
-                className="px-3 py-1.5 text-sm bg-background hover:bg-primary/10 border border-border hover:border-primary rounded-md transition-colors flex-shrink-0"
-                title={project.window_title}
+                className="px-3 py-1.5 text-sm bg-background hover:bg-primary/10 border border-border hover:border-primary rounded-md transition-colors flex-shrink-0 max-w-[18ch] truncate"
+                title={project.project_name}
               >
-                {project.project_name}
+                {project.project_name.length > 18 ? project.project_name.slice(0, 18) + '…' : project.project_name}
               </button>
             ))
           )}
