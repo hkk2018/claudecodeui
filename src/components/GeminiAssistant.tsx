@@ -69,9 +69,7 @@ export default function GeminiAssistant({ sessions }: GeminiAssistantProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [lastAnalysisTime, setLastAnalysisTime] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -79,66 +77,6 @@ export default function GeminiAssistant({ sessions }: GeminiAssistantProps) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isMinimized]);
-
-  // Analyze sessions every 10 minutes
-  useEffect(() => {
-    const analyzeActiveSessions = async () => {
-      // Only analyze if there are active sessions
-      const activeSessions = sessions
-        .filter(s => s.isActive)
-        .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
-        .slice(0, 3); // Top 3 most recent active sessions
-
-      if (activeSessions.length === 0) return;
-
-      const now = Date.now();
-      // Skip if analyzed within last 9 minutes (give 1 min buffer)
-      if (now - lastAnalysisTime < 9 * 60 * 1000) return;
-
-      setLastAnalysisTime(now);
-
-      try {
-        // Call backend API to get Gemini recommendation
-        const response = await authenticatedFetch('/api/gemini/analyze', {
-          method: 'POST',
-          body: JSON.stringify({ sessions: activeSessions }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const recommendation = data.recommendation;
-
-          setMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: recommendation,
-              timestamp: Date.now(),
-            },
-          ]);
-
-          // Auto-open the assistant if closed
-          if (!isOpen) {
-            setIsOpen(true);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to get Gemini recommendation:', error);
-      }
-    };
-
-    // Run immediately on mount
-    analyzeActiveSessions();
-
-    // Set up 10-minute interval
-    intervalRef.current = setInterval(analyzeActiveSessions, 10 * 60 * 1000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [sessions, isOpen, lastAnalysisTime]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -310,8 +248,8 @@ export default function GeminiAssistant({ sessions }: GeminiAssistantProps) {
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm text-center">
                 <Sparkles className="w-12 h-12 mb-3 text-purple-500/50" />
-                <p>我會每 10 分鐘分析你最近的活躍會話</p>
-                <p className="mt-1">並推薦你應該優先處理的問題</p>
+                <p>點左下閃電按鈕快速檢查</p>
+                <p className="mt-1">哪些會話需要你優先處理</p>
               </div>
             ) : (
               messages.map((msg, idx) => (
