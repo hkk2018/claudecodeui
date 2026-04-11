@@ -84,6 +84,7 @@ import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import overlayRoutes from './routes/overlay.js';
+import geminiRoutes from './routes/gemini.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -352,6 +353,9 @@ app.use('/api/user', authenticateToken, userRoutes);
 
 // Overlay API Routes (protected)
 app.use('/api/overlay', authenticateToken, overlayRoutes);
+
+// Gemini AI Assistant Routes (protected)
+app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -1905,9 +1909,10 @@ app.get('/api/cli/claude/usage', authenticateToken, async (req, res) => {
       const clean = stripAnsi(text);
 
       // Parse usage percentages and reset times
-      const sessionMatch = clean.match(/Current session[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+)/);
-      const weekAllMatch = clean.match(/Current week \(all models\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+)/);
-      const weekSonnetMatch = clean.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+)/);
+      // CRITICAL: Must use negative lookahead to prevent "Current session" matching "Current week"
+      const sessionMatch = clean.match(/Current session(?!\s*\([\w\s]+\))[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+?)(?=\s*\n|$)/);
+      const weekAllMatch = clean.match(/Current week \(all models\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+?)(?=\s*\n|$)/);
+      const weekSonnetMatch = clean.match(/Current week \(Sonnet only\)[\s\S]*?(\d+)%\s*used[\s\S]*?Resets?\s+([^\n]+?)(?=\s*\n|$)/);
       const extraUsageMatch = clean.match(/Extra usage\s*\n([\s\S]*?)(?:\n\n|\nEsc|\n[A-Z])/);
 
       return {
