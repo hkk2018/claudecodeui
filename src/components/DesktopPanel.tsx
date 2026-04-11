@@ -245,13 +245,14 @@ export default function DesktopPanel({
     }
   };
 
-  // Prepare session data for Gemini Assistant
+  // Prepare session data for Gemini Assistant (include message content for context)
   const sessionData = cards.map(card => ({
     projectName: card.projectName,
     sessionId: card.sessionId,
     lastActivity: card.lastActivity,
     messageCount: card.messageCount,
     isActive: card.isActive,
+    lastMessage: card.lastAssistantMessage || '',
   }));
 
   return (

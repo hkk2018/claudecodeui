@@ -12,6 +12,7 @@ interface GeminiAssistantProps {
     lastActivity: string;
     messageCount: number;
     isActive: boolean;
+    lastMessage: string;
   }>;
 }
 

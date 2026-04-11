@@ -7,12 +7,11 @@ const GEMINI_CLI = '/usr/bin/gemini';
 
 function runGemini(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile(GEMINI_CLI, [], { timeout: 30000 }, (error, stdout, _stderr) => {
+    const child = execFile(GEMINI_CLI, [], { timeout: 60000 }, (error, stdout, _stderr) => {
       if (error) {
         reject(error);
         return;
       }
-      // Strip stderr noise (import errors, cached credentials messages)
       resolve(stdout.trim());
     });
     child.stdin?.write(prompt);
@@ -26,12 +25,28 @@ interface Session {
   lastActivity: string;
   messageCount: number;
   isActive: boolean;
+  lastMessage?: string;
 }
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+}
+
+// Truncate message to avoid exceeding prompt limits
+function truncateMessage(msg: string, maxLen = 300): string {
+  if (!msg || msg.length <= maxLen) return msg || '(無訊息)';
+  return msg.slice(0, maxLen) + '...';
+}
+
+function buildSessionContext(sessions: Session[]): string {
+  return sessions.map((s, idx) => {
+    const timeDiff = Math.floor((Date.now() - new Date(s.lastActivity).getTime()) / 60000);
+    const timeStr = timeDiff < 60 ? `${timeDiff}分鐘前` : `${Math.floor(timeDiff / 60)}小時前`;
+    return `--- ${idx + 1}. ${s.projectName} (${s.isActive ? '進行中' : '已停止'}, ${timeStr}) ---
+${truncateMessage(s.lastMessage || '')}`;
+  }).join('\n\n');
 }
 
 // POST /api/gemini/analyze - Analyze active sessions and provide recommendations
@@ -43,16 +58,15 @@ router.post('/analyze', async (req, res) => {
       return res.json({ recommendation: '目前沒有活躍的會話需要分析。' });
     }
 
-    const sessionContext = sessions.map((s, idx) => {
-      const timeDiff = Math.floor((Date.now() - new Date(s.lastActivity).getTime()) / 60000);
-      return `${idx + 1}. 專案: ${s.projectName}, 最後活動: ${timeDiff}分鐘前, 訊息: ${s.messageCount}, 狀態: ${s.isActive ? '進行中' : '已停止'}`;
-    }).join('\n');
+    const sessionContext = buildSessionContext(sessions);
 
-    const prompt = `你是專案管理AI助手。分析以下Claude Code開發會話，推薦優先處理的項目。
+    const prompt = `你是專案管理AI助手。以下是使用者正在進行的多個 Claude Code 開發會話，每個會話的最後訊息代表目前狀態。
+
+請閱讀每個會話的內容，判斷哪些需要使用者決策或有 blocker，並推薦優先處理順序。
 
 ${sessionContext}
 
-用繁體中文回覆，不超過150字。包含建議優先處理的專案和簡短理由。
+用繁體中文回覆，不超過200字。重點說明：哪個專案卡住了、為什麼卡、使用者需要做什麼決策。
 
 當提到專案名稱時用 [project:專案名稱] 格式。可用專案: ${sessions.map(s => s.projectName).join(', ')}`;
 
@@ -76,24 +90,22 @@ router.post('/chat', async (req, res) => {
       sessions: Session[];
     };
 
-    const sessionContext = sessions.map((s, idx) => {
-      const timeDiff = Math.floor((Date.now() - new Date(s.lastActivity).getTime()) / 60000);
-      return `${idx + 1}. 專案: ${s.projectName}, 最後活動: ${timeDiff}分鐘前, 訊息: ${s.messageCount}, 狀態: ${s.isActive ? '進行中' : '已停止'}`;
-    }).join('\n');
+    const sessionContext = buildSessionContext(sessions);
 
     const recentHistory = history.slice(-6).map(msg =>
       `${msg.role === 'user' ? '使用者' : '助手'}: ${msg.content}`
     ).join('\n');
 
-    const prompt = `你是專案管理AI助手，協助使用者管理Claude Code開發會話。
+    const prompt = `你是專案管理AI助手。以下是使用者正在進行的多個 Claude Code 開發會話，每個會話的最後訊息代表目前狀態。
 
-目前會話狀態:
 ${sessionContext}
+
+請閱讀每個會話的實際內容來判斷優先順序，不要只看訊息數量。重點關注：哪些會話有 blocker、需要使用者決策、或等待回應。
 
 ${recentHistory ? `對話紀錄:\n${recentHistory}\n` : ''}
 使用者: ${message}
 
-用繁體中文回答，不超過200字。當提到專案名稱時用 [project:專案名稱] 格式。可用專案: ${sessions.map(s => s.projectName).join(', ')}`;
+用繁體中文回答，不超過300字。當提到專案名稱時用 [project:專案名稱] 格式。可用專案: ${sessions.map(s => s.projectName).join(', ')}`;
 
     const response = await runGemini(prompt);
     res.json({ response });
