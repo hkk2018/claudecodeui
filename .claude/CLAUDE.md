@@ -1,7 +1,7 @@
 ---
 title: "Claude Code UI - 開發指南"
 description: "部署架構、更新流程、環境變數處理與除錯指引"
-last_modified: "2026-03-29 12:49"
+last_modified: "2026-04-19 21:31"
 ---
 
 # Claude Code UI - 開發指南
@@ -218,3 +218,14 @@ const PORT = cliArgs.port || process.env.PORT || 3001;
 1. **保持現狀**：大多數情況下，環境變數繼承是有益的
 2. **需要時覆蓋**：在執行特定指令時使用 `PORT=xxxx` 明確指定
 3. **文檔記錄**：讓團隊成員知道這個行為，避免意外衝突
+
+## SDK / 對話功能測試規範
+
+測試 SDK 升級、slash command、對話流程等功能時，**必須使用測試專用 sandbox repo**，禁止使用任何有實際工作內容的 repo。
+
+- **測試 repo 路徑**：`/home/ubuntu/Projects/ken/claudecodeui-sandbox`
+- **測試方式**：透過 WebSocket API 送 `claude-command`，`projectPath` 指向 sandbox repo
+- **禁止事項**：
+  - ❌ 使用 `claudecodeui` 本身或其他有實際工作的 repo 進行對話測試
+  - ❌ 使用使用者正在操作的 session
+- **測試後清理**：測試產生的 session 可保留供除錯，但不要累積過多

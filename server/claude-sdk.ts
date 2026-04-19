@@ -13,9 +13,34 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { createRequire } from 'module';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+
+/**
+ * Resolve the correct Claude Code native binary path.
+ *
+ * The SDK searches musl before glibc on Linux, but on glibc systems (Ubuntu/Debian)
+ * the musl binary cannot run (missing /lib/ld-musl-x86_64.so.1). We detect this and
+ * explicitly point to the glibc binary.
+ */
+function resolveClaudeBinaryPath(): string | undefined {
+  if (process.platform !== 'linux') return undefined;
+
+  try {
+    const esmRequire = createRequire(import.meta.url);
+    const sdkPath = esmRequire.resolve('@anthropic-ai/claude-agent-sdk');
+    const sdkRequire = createRequire(sdkPath);
+    const glibcPkg = `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`;
+    return sdkRequire.resolve(`${glibcPkg}/claude`);
+  } catch {
+    // glibc package not available — let SDK fall back to its own resolution
+    return undefined;
+  }
+}
+
+const claudeBinaryPath = resolveClaudeBinaryPath();
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -243,6 +268,11 @@ function mapCliOptionsToSDK(options: any = {}) {
   // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
+  }
+
+  // Point to the correct native binary on Linux glibc systems
+  if (claudeBinaryPath) {
+    sdkOptions.pathToClaudeCodeExecutable = claudeBinaryPath;
   }
 
   return sdkOptions;
