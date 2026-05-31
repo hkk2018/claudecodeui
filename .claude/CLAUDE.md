@@ -199,7 +199,7 @@ Service Worker (`public/sw.js`) 使用 **Network-First** 策略：
 
 ### 程式碼位置
 
-在 `server/index.js:942-950`，PTY spawn 時會傳遞完整的 `process.env`：
+在 `server/index.ts:1146-1158`，PTY spawn 時會傳遞完整的 `process.env`：
 
 ```javascript
 env: {
@@ -234,7 +234,7 @@ env -u PORT pnpm run dev
 
 #### 選項 2：修改程式碼，設定黑名單過濾
 
-在 `server/index.js` 中，可以在 spawn 時過濾掉不想繼承的環境變數：
+在 `server/index.ts` 中，可以在 spawn 時過濾掉不想繼承的環境變數：
 
 ```javascript
 // 定義不要繼承的環境變數黑名單
