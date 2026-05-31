@@ -1,7 +1,7 @@
 ---
 title: "Claude Code UI - 開發指南"
 description: "部署架構、更新流程、環境變數處理與除錯指引"
-last_modified: "2026-04-19 21:31"
+last_modified: "2026-05-31 16:25"
 ---
 
 # Claude Code UI - 開發指南
@@ -63,15 +63,27 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/Projects/ken/claudecodeui
 Environment="NODE_ENV=production"
-ExecStart=/usr/bin/node /home/ubuntu/Projects/ken/claudecodeui/server/index.js --port=9001
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/usr/bin/node /home/ubuntu/Projects/ken/claudecodeui/dist-server/index.js --port=9001
 Restart=always
 RestartSec=10
+
+# 資源硬限制：防止 busy-loop / 記憶體洩漏拖垮整台機器（16 核機器）
+# CPUQuota=400% → 最多用 4 顆核心（100% = 1 核），剩 12 核留給系統
+# MemoryHigh    → 軟限制，超過時 systemd 先嘗試回收記憶體
+# MemoryMax     → 硬限制，壓不下去就 OOM kill 此 service（Restart=always 會自動重啟）
+CPUQuota=400%
+MemoryHigh=900M
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-**注意**：PORT 使用命令列參數 `--port=9001` 而非環境變數，避免子進程繼承導致衝突。
+**注意**：
+- PORT 使用命令列參數 `--port=9001` 而非環境變數，避免子進程繼承導致衝突。
+- `ExecStart` 指向 `dist-server/index.js`（TypeScript 編譯後的產物），不是 source 的 `server/index.ts`。
+- 資源限制由 systemd cgroup 強制執行，程式碼層的 bug（busy-loop、記憶體洩漏）無法繞過。詳見下方「資源限制」章節。
 
 ### 穩定版 (`/etc/systemd/system/claude-code-ui.service`)
 
@@ -91,6 +103,48 @@ RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
+```
+
+## 資源限制（systemd cgroup）
+
+### 為什麼需要
+
+dev service 在本機跑了一陣子後曾出現程式碼層的 busy-loop（Gemini 自動分析迴圈，已於 commit `d634304` 修掉），導致 CPU 飆到 60%+ 拖垮整台機器畫面當機。即使該 bug 已修，未來新功能仍可能出現類似問題。**程式自己不可能可靠地限制自己的 CPU**——若卡在 busy-loop，那段「監控並自殺」的程式碼也會卡住。唯一可靠的防線是 OS 層強制限制。
+
+### 機制
+
+由 systemd 透過 Linux cgroup 強制執行，**只套用在 dev service (9001)**，stable 不動。三個關鍵設定（在 unit 檔的 `[Service]` 區塊）：
+
+| 設定 | 值 | 行為 |
+|------|----|------|
+| `CPUQuota` | `400%` | 最多用 4 顆 CPU 核心（100% = 1 核）。本機 16 核，留 12 核給系統 |
+| `MemoryHigh` | `900M` | 軟限制：超過時 kernel 先嘗試回收記憶體並節流 |
+| `MemoryMax` | `1G` | 硬限制：壓不下去就 OOM kill 此 service，`Restart=always` 自動重啟 |
+
+### 故障時的行為
+
+| 情境 | 結果 |
+|------|------|
+| 程式 busy-loop | CPU 卡在 400%，系統其他 14 核不受影響，使用者畫面不會當 |
+| 記憶體洩漏到 1GB | systemd 只殺 `claude-code-ui-dev`，自動重啟，**不影響系統其他程式** |
+| 正常運作 | 一般用量約 280-500MB，遠低於限制 |
+
+### 自行查證
+
+```bash
+# 看實際生效的限制值
+systemctl show claude-code-ui-dev -p CPUQuotaPerSecUSec -p MemoryHigh -p MemoryMax -p MemoryCurrent
+
+# CPUQuotaPerSecUSec=4s 代表每秒最多 4 秒 CPU 時間 = 400%
+```
+
+### ⚠️ 此設定不在版控
+
+systemd unit 檔位於 `/etc/systemd/system/`，**不會跟著 git repo 走**。換機器或重灌系統時，需依本文檔重新建立 unit 檔，再執行：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart claude-code-ui-dev
 ```
 
 ## 常用除錯指令
