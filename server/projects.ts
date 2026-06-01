@@ -1162,6 +1162,22 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
     // OPTIMIZATION: Directly read the session file by sessionId instead of scanning all files
     // Claude stores each session in a file named {sessionId}.jsonl
     const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+
+    // Large-file fast path: read only the tail bytes needed for this page
+    // instead of streaming the whole file. Streaming materializes multi-MB
+    // individual lines (embedded tool results) as single strings, spiking RSS
+    // past the cgroup limit → OOM. Only for paginated (limit !== null) reads;
+    // returns null (→ fall through to the bounded stream) if the page can't be
+    // satisfied from a reasonable tail.
+    if (limit !== null) {
+      let stat = null;
+      try { stat = await fs.stat(sessionFile); } catch { /* missing → legacy scan below */ }
+      if (stat && stat.size > 5 * 1024 * 1024) {
+        const tailResult = await readSessionMessagesTail(sessionFile, sessionId, limit, offset, stat.size);
+        if (tailResult) return tailResult;
+      }
+    }
+
     // Keep only the tail window the caller will actually return. Loading every
     // entry of a multi-hundred-MB session JSONL into this array OOMs the process
     // (see docs/dev-logs/troubleshooting/2026-06-01-desktop-mode-oom-crash-loop.md).
@@ -1263,6 +1279,60 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
   } catch (error) {
     console.error(`Error reading messages for session ${sessionId}:`, error);
     return limit === null ? [] : { messages: [], total: 0, hasMore: false };
+  }
+}
+
+// Read one page of a large session file by reading only the tail bytes that
+// contain it, growing the read until we have more than (offset+limit) matching
+// entries or reach the start of the file. Avoids streaming hundreds of MB (and
+// materializing multi-MB lines) for what is usually the last ~30 messages.
+// Returns the paginated response, or null if the page needs more than a
+// reasonable tail (caller falls back to the bounded stream).
+async function readSessionMessagesTail(filePath, sessionId, limit, offset, size) {
+  const need = offset + limit;
+  const MAX_TAIL = 32 * 1024 * 1024;
+  let chunk = 512 * 1024;
+
+  const fd = await fs.open(filePath, 'r');
+  try {
+    while (true) {
+      const readLen = Math.min(size, chunk);
+      const buf = Buffer.alloc(readLen);
+      await fd.read(buf, 0, readLen, size - readLen);
+      const reachedStart = readLen >= size;
+
+      let lines = buf.toString('utf8').split('\n');
+      if (!reachedStart) lines = lines.slice(1); // drop leading partial line
+
+      const entries = [];
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let entry;
+        try { entry = JSON.parse(line); } catch { continue; }
+        if (entry.sessionId === sessionId) entries.push(entry);
+      }
+
+      if (entries.length > need || reachedStart) {
+        entries.sort((a, b) =>
+          new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime()
+        );
+        const len = entries.length;
+        const startIndex = Math.max(0, len - offset - limit);
+        const endIndex = Math.max(0, len - offset);
+        const messages = entries.slice(startIndex, endIndex);
+        const hasMore = !reachedStart || startIndex > 0;
+        // Exact total only when we read the whole file; otherwise estimate by density.
+        const total = reachedStart
+          ? len
+          : Math.max(len, Math.round((size * len) / readLen));
+        return { messages, total, hasMore, offset, limit };
+      }
+
+      if (chunk >= MAX_TAIL) return null; // messages too large for tail read
+      chunk *= 4;
+    }
+  } finally {
+    await fd.close();
   }
 }
 
