@@ -748,8 +748,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     
     const allSessions = new Map();
     const allEntries = [];
-    const uuidToSessionMap = new Map();
-    
+
     // Collect all sessions and entries from all files
     for (const { file } of filesWithStats) {
       const jsonlFile = path.join(projectDir, file);
@@ -768,13 +767,6 @@ async function getSessions(projectName, limit = 5, offset = 0) {
         break;
       }
     }
-    
-    // Build UUID-to-session mapping for timeline detection
-    allEntries.forEach(entry => {
-      if (entry.uuid && entry.sessionId) {
-        uuidToSessionMap.set(entry.uuid, entry.sessionId);
-      }
-    });
     
     // Group sessions by first user message ID
     const sessionGroups = new Map(); // firstUserMsgId -> { latestSession, allSessions[] }
@@ -867,7 +859,13 @@ async function parseJsonlSessions(filePath) {
       if (line.trim()) {
         try {
           const entry = JSON.parse(line);
-          entries.push(entry);
+          // Only the first user message of each session is needed downstream
+          // (caller groups sessions by it). Collecting every entry OOMs on
+          // large files — per-session metadata below is computed incrementally
+          // and does not depend on this array.
+          if (entry.type === 'user' && entry.parentUuid === null && entry.uuid) {
+            entries.push(entry);
+          }
 
           // Handle summary entries that don't have sessionId yet
           if (entry.type === 'summary' && entry.summary && !entry.sessionId && entry.leafUuid) {
@@ -1018,7 +1016,17 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
     // OPTIMIZATION: Directly read the session file by sessionId instead of scanning all files
     // Claude stores each session in a file named {sessionId}.jsonl
     const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+    // Keep only the tail window the caller will actually return. Loading every
+    // entry of a multi-hundred-MB session JSONL into this array OOMs the process
+    // (see docs/dev-logs/troubleshooting/2026-06-01-desktop-mode-oom-crash-loop.md).
+    const keep = limit === null ? Infinity : offset + limit;
+    let total = 0;
     const messages = [];
+    const collect = (entry) => {
+      total++;
+      messages.push(entry);
+      if (messages.length > keep) messages.shift();
+    };
 
     try {
       // Check if the session file exists
@@ -1037,7 +1045,7 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
             const entry = JSON.parse(line);
             // Double-check sessionId matches (defensive, should always match)
             if (entry.sessionId === sessionId) {
-              messages.push(entry);
+              collect(entry);
             }
           } catch (parseError) {
             console.warn('Error parsing line:', parseError.message);
@@ -1068,7 +1076,7 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
               try {
                 const entry = JSON.parse(line);
                 if (entry.sessionId === sessionId) {
-                  messages.push(entry);
+                  collect(entry);
                 }
               } catch (parseError) {
                 console.warn('Error parsing line:', parseError.message);
@@ -1086,19 +1094,18 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
       (new Date(a.timestamp || 0) as any) - (new Date(b.timestamp || 0) as any)
     );
 
-    const total = sortedMessages.length;
-
     // If no limit is specified, return all messages (backward compatibility)
     if (limit === null) {
       return sortedMessages;
     }
 
-    // Apply pagination - for recent messages, we need to slice from the end
-    // offset 0 should give us the most recent messages
-    const startIndex = Math.max(0, total - offset - limit);
-    const endIndex = total - offset;
+    // `messages` is already bounded to the last (offset+limit) entries, so slice
+    // within that window. `total` is the true count tracked during streaming.
+    const windowLen = sortedMessages.length;
+    const startIndex = Math.max(0, windowLen - offset - limit);
+    const endIndex = Math.max(0, windowLen - offset);
     const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
-    const hasMore = startIndex > 0;
+    const hasMore = (total - offset - limit) > 0;
 
     return {
       messages: paginatedMessages,
