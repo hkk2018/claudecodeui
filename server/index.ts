@@ -230,6 +230,54 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Scan a JSONL file from the end and return the last entry matching `predicate`,
+// reading only the tail (growing the read if needed) — never the whole file.
+// Transcripts/sessions can be hundreds of MB; a full readFile OOMs the process,
+// and these scans run on hot paths (Stop hook on every turn, token-usage on
+// session open). Returns the parsed entry, or null.
+async function findLastEntryFromTail(filePath: string, predicate: (entry: any) => boolean): Promise<any> {
+  const stat = await fsPromises.stat(filePath);
+  const MAX_TAIL = 8 * 1024 * 1024;
+  let chunk = 256 * 1024;
+  const fd = await fsPromises.open(filePath, 'r');
+  try {
+    while (true) {
+      const readLen = Math.min(stat.size, chunk);
+      const buf = Buffer.alloc(readLen);
+      await fd.read(buf, 0, readLen, stat.size - readLen);
+      const reachedStart = readLen >= stat.size;
+      let lines = buf.toString('utf-8').split('\n');
+      if (!reachedStart) lines = lines.slice(1); // drop leading partial line
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i].trim()) continue;
+        let entry;
+        try { entry = JSON.parse(lines[i]); } catch { continue; }
+        if (predicate(entry)) return entry;
+      }
+      if (reachedStart || chunk >= MAX_TAIL) return null;
+      chunk *= 4;
+    }
+  } finally {
+    await fd.close();
+  }
+}
+
+// Extract the last assistant text message from a transcript (tail read only).
+async function readLastAssistantMessage(transcriptPath: string): Promise<string | null> {
+  const entry = await findLastEntryFromTail(
+    transcriptPath,
+    (e) => e.message?.role === 'assistant' && !!e.message?.content
+  );
+  if (!entry) return null;
+  const content = entry.message.content;
+  if (Array.isArray(content)) {
+    const textBlock = [...content].reverse().find((b: any) => b.type === 'text' && b.text);
+    return textBlock ? textBlock.text : null;
+  }
+  if (typeof content === 'string' && content) return content;
+  return null;
+}
+
 // Hook event endpoint (no auth - called from CLI hook scripts)
 // Receives events from ~/.claude/settings.json hooks and broadcasts via WebSocket
 // Input format matches Claude CLI hook input: { hook_event_name, session_id, transcript_path, cwd, message?, title? }
@@ -258,27 +306,7 @@ app.post('/api/hook-event', async (req, res) => {
   let lastAssistantMessage = null;
   if (event === 'Stop' && body.transcript_path) {
     try {
-      const transcriptContent = await fsPromises.readFile(body.transcript_path, 'utf-8');
-      const lines = transcriptContent.trim().split('\n');
-      // Read from end to find last assistant text message
-      for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-          const entry = JSON.parse(lines[i]);
-          if (entry.message?.role === 'assistant' && entry.message?.content) {
-            const content = entry.message.content;
-            if (Array.isArray(content)) {
-              const textBlock = [...content].reverse().find((b: any) => b.type === 'text' && b.text);
-              if (textBlock) {
-                lastAssistantMessage = textBlock.text;
-                break;
-              }
-            } else if (typeof content === 'string' && content) {
-              lastAssistantMessage = content;
-              break;
-            }
-          }
-        } catch {}
-      }
+      lastAssistantMessage = await readLastAssistantMessage(body.transcript_path);
     } catch (err) {
       console.warn(`[HOOK] Failed to read transcript: ${(err as any).message}`);
     }
@@ -1806,44 +1834,31 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
       return res.status(400).json({ error: 'Invalid path' });
     }
 
-    // Read and parse the JSONL file
-    let fileContent;
-    try {
-      fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
-      }
-      throw error; // Re-throw other errors to be caught by outer try-catch
-    }
-    const lines = fileContent.trim().split('\n');
-
     const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
     const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
     let inputTokens = 0;
     let cacheCreationTokens = 0;
     let cacheReadTokens = 0;
 
-    // Find the latest assistant message with usage data (scan from end)
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const entry = JSON.parse(lines[i]);
-
-        // Only count assistant messages which have usage data
-        if (entry.type === 'assistant' && entry.message?.usage) {
-          const usage = entry.message.usage;
-
-          // Use token counts from latest assistant message only
-          inputTokens = usage.input_tokens || 0;
-          cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-          cacheReadTokens = usage.cache_read_input_tokens || 0;
-
-          break; // Stop after finding the latest assistant message
-        }
-      } catch (parseError) {
-        // Skip lines that can't be parsed
-        continue;
+    // Find the latest assistant message with usage data by reading only the
+    // tail — these session files can be hundreds of MB and a full read OOMs.
+    let latestUsageEntry;
+    try {
+      latestUsageEntry = await findLastEntryFromTail(
+        jsonlPath,
+        (e) => e.type === 'assistant' && !!e.message?.usage
+      );
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
       }
+      throw error; // Re-throw other errors to be caught by outer try-catch
+    }
+    if (latestUsageEntry) {
+      const usage = latestUsageEntry.message.usage;
+      inputTokens = usage.input_tokens || 0;
+      cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+      cacheReadTokens = usage.cache_read_input_tokens || 0;
     }
 
     // Calculate total context usage (excluding output_tokens, as per ccusage)
