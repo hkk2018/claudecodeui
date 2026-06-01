@@ -32,7 +32,9 @@
     "preview": "vite preview",
     "start": "pnpm run build && pnpm run server",
     "release": "./release.sh",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "pnpm run build:server && pnpm run test:oom",
+    "test:oom": "node --max-old-space-size=192 test/oom-large-session.test.mjs"
   },
   "keywords": [
     "claude coode",
