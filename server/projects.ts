@@ -741,18 +741,24 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       jsonlFiles.map(async (file) => {
         const filePath = path.join(projectDir, file);
         const stats = await fs.stat(filePath);
-        return { file, mtime: stats.mtime };
+        return { file, mtime: stats.mtime, size: stats.size };
       })
     );
     filesWithStats.sort((a: any, b: any) => (b.mtime as any) - (a.mtime as any));
-    
+
     const allSessions = new Map();
     const allEntries = [];
 
-    // Collect all sessions and entries from all files
-    for (const { file } of filesWithStats) {
+    // Collect all sessions and entries from all files. Large files are read
+    // head+tail only (readLargeSessionMeta) instead of fully streamed — the old
+    // full read of a 575MB session every 30s poll was the dev service's main CPU
+    // cost and the memory spike that OOMed it.
+    const LARGE_FILE_BYTES = 5 * 1024 * 1024;
+    for (const { file, size } of filesWithStats) {
       const jsonlFile = path.join(projectDir, file);
-      const result = await parseJsonlSessions(jsonlFile);
+      const result = size > LARGE_FILE_BYTES
+        ? await readLargeSessionMeta(jsonlFile, file, size)
+        : await parseJsonlSessions(jsonlFile);
       
       result.sessions.forEach(session => {
         if (!allSessions.has(session.id)) {
@@ -1004,6 +1010,146 @@ async function parseJsonlSessions(filePath) {
 
   } catch (error) {
     console.error('Error reading JSONL file:', error);
+    return { sessions: [], entries: [] };
+  }
+}
+
+// Extract displayable text from a parsed JSONL entry, applying the same
+// system/command-message filtering as parseJsonlSessions. Returns
+// { role, text } or null. Shared by the head/tail large-file reader.
+function extractEntryText(entry) {
+  const msg = entry.message;
+  if (!msg || !msg.content) return null;
+
+  if (msg.role === 'user') {
+    let text = msg.content;
+    if (Array.isArray(text) && text.length > 0 && text[0].type === 'text') text = text[0].text;
+    if (typeof text !== 'string' || text.length === 0) return null;
+    const isSystem =
+      text.startsWith('<command-name>') || text.startsWith('<command-message>') ||
+      text.startsWith('<command-args>') || text.startsWith('<local-command-stdout>') ||
+      text.startsWith('<system-reminder>') || text.startsWith('Caveat:') ||
+      text.startsWith('This session is being continued from a previous') ||
+      text.startsWith('Invalid API key') || text.includes('{"subtasks":') ||
+      text.includes('CRITICAL: You MUST respond with ONLY a JSON') || text === 'Warmup';
+    return isSystem ? null : { role: 'user', text };
+  }
+
+  if (msg.role === 'assistant') {
+    if (entry.isApiErrorMessage === true) return null;
+    let text = null;
+    if (Array.isArray(msg.content)) {
+      for (const part of msg.content) if (part.type === 'text' && part.text) text = part.text;
+    } else if (typeof msg.content === 'string') {
+      text = msg.content;
+    }
+    if (typeof text !== 'string' || text.length === 0) return null;
+    const isSystem =
+      text.startsWith('Invalid API key') || text.includes('{"subtasks":') ||
+      text.includes('CRITICAL: You MUST respond with ONLY a JSON');
+    return isSystem ? null : { role: 'assistant', text };
+  }
+
+  return null;
+}
+
+// Derive session metadata for a large session file WITHOUT reading it whole.
+// Reads only the head (first user message for grouping + cwd + optional explicit
+// summary) and the tail (last user/assistant message + lastActivity), and
+// estimates messageCount from file size. Returns the same { sessions, entries }
+// shape as parseJsonlSessions so getSessions' grouping/filtering is unchanged.
+async function readLargeSessionMeta(filePath, fileName, size) {
+  const sessionId = fileName.replace(/\.jsonl$/, '');
+  const HEAD_BYTES = 64 * 1024;
+  const TAIL_BYTES = 128 * 1024;
+
+  try {
+    const fd = await fs.open(filePath, 'r');
+    let headStr, tailStr;
+    try {
+      const headLen = Math.min(size, HEAD_BYTES);
+      const headBuf = Buffer.alloc(headLen);
+      await fd.read(headBuf, 0, headLen, 0);
+      headStr = headBuf.toString('utf8');
+
+      const tailLen = Math.min(size, TAIL_BYTES);
+      const tailBuf = Buffer.alloc(tailLen);
+      await fd.read(tailBuf, 0, tailLen, size - tailLen);
+      tailStr = tailBuf.toString('utf8');
+    } finally {
+      await fd.close();
+    }
+
+    // HEAD — drop trailing partial line. Find cwd, explicit summary, first user message.
+    const headLines = headStr.split('\n');
+    if (size > HEAD_BYTES) headLines.pop();
+    let cwd = '';
+    let explicitSummary = null;
+    let firstUserEntry = null;
+    let firstUserText = null;
+    let headBytes = 0;
+    let headCount = 0;
+    for (const line of headLines) {
+      headBytes += Buffer.byteLength(line) + 1;
+      if (!line.trim()) continue;
+      headCount++;
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      if (!cwd && entry.cwd) cwd = entry.cwd;
+      if (!explicitSummary && entry.type === 'summary' && entry.summary) explicitSummary = entry.summary;
+      if (!firstUserEntry && entry.sessionId && entry.type === 'user'
+          && entry.parentUuid === null && entry.uuid) {
+        firstUserEntry = entry;
+        const t = extractEntryText(entry);
+        if (t) firstUserText = t.text;
+      }
+    }
+
+    // TAIL — drop leading partial line. Find last user/assistant text + lastActivity.
+    const tailLines = tailStr.split('\n');
+    if (size > TAIL_BYTES) tailLines.shift();
+    let lastUserMessage = null;
+    let lastAssistantMessage = null;
+    let lastActivity = null;
+    for (const line of tailLines) {
+      if (!line.trim()) continue;
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      if (entry.timestamp) lastActivity = new Date(entry.timestamp);
+      const t = extractEntryText(entry);
+      if (t?.role === 'user') lastUserMessage = t.text;
+      else if (t?.role === 'assistant') lastAssistantMessage = t.text;
+    }
+
+    // Fallbacks so a real (non-ghost) large session never disappears from the list.
+    if (!lastUserMessage && firstUserText) lastUserMessage = firstUserText;
+    if (!lastActivity) {
+      try { lastActivity = (await fs.stat(filePath)).mtime; } catch { lastActivity = new Date(); }
+    }
+
+    let summary = explicitSummary;
+    if (!summary) {
+      const base = lastUserMessage || lastAssistantMessage || firstUserText;
+      if (base) summary = base.length > 50 ? base.substring(0, 50) + '...' : base;
+    }
+    if (!summary) summary = 'New Session';
+
+    // messageCount is a cosmetic badge — estimate from avg line size in the head.
+    const avgLine = headCount > 0 ? headBytes / headCount : 0;
+    const messageCount = avgLine > 0 ? Math.round(size / avgLine) : 0;
+
+    const session = {
+      id: sessionId,
+      summary,
+      messageCount,
+      lastActivity,
+      cwd,
+      lastUserMessage,
+      lastAssistantMessage,
+    };
+    return { sessions: [session], entries: firstUserEntry ? [firstUserEntry] : [] };
+  } catch (error) {
+    console.error('Error reading large session meta:', filePath, error.message);
     return { sessions: [], entries: [] };
   }
 }
