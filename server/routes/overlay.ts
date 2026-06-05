@@ -23,8 +23,8 @@ router.post('/launch', async (req, res) => {
         chrome.unref();
 
         // TODO: fix - wmctrl always-on-top not working (user can manually pin via desktop)
-        setTimeout(() => {
-            const env = { ...process.env, DISPLAY: process.env.DISPLAY || ':1' };
+        setTimeout(async () => {
+            const env = { ...process.env, DISPLAY: await resolveDisplay() };
             exec(`wmctrl -r "Claude Code UI" -b add,above`, { env }, (err) => {
                 if (err) {
                     // Fallback: try matching by localhost URL
@@ -44,7 +44,7 @@ router.post('/pin', async (req, res) => {
     const { pin = true } = req.body || {};
     const port = req.app.locals.port || 9001;
     const action = pin ? 'add' : 'remove';
-    const env = { ...process.env, DISPLAY: process.env.DISPLAY || ':1' };
+    const env = { ...process.env, DISPLAY: await resolveDisplay() };
 
     exec(`wmctrl -r "Claude Code UI" -b ${action},above`, { env }, (err) => {
         if (err) {
@@ -66,6 +66,59 @@ const WM_CLASS_TO_EDITOR = {
     'code.Code': 'vscode',
 };
 
+// Resolve which X DISPLAY actually has a window manager we can talk to.
+//
+// The fallback here used to be a hardcoded ':1'. After a reboot the X server can
+// come up on a different display number (under DCV it's :0 one boot, :1 another),
+// and a hardcoded ':1' then hits "Cannot open display" → wmctrl returns nothing →
+// the UI shows "No IDE windows" even though the windows are right there. The X
+// socket dir (/tmp/.X11-unix) is empty under DCV's abstract sockets, so we can't
+// detect the live display by scanning the filesystem — instead we probe candidate
+// displays with `wmctrl -lx` and use the first that opens. The working display is
+// cached and tried first; if X later restarts under a live service the cached
+// display stops opening and the probe loop re-detects the new one (self-healing).
+const DISPLAY_CANDIDATES = [':0', ':1', ':2'];
+let cachedDisplay = null;
+
+// Run `wmctrl -lx` against whichever display works, returning its stdout + the
+// display that produced it. Throws only when no candidate display opens at all.
+async function wmctrlList() {
+    // An explicit DISPLAY (operator-set) wins and is the only candidate. Otherwise
+    // try the last-known-good display first, then the static candidate list.
+    const candidates = process.env.DISPLAY
+        ? [process.env.DISPLAY]
+        : [...new Set([cachedDisplay, ...DISPLAY_CANDIDATES].filter(Boolean))];
+
+    let lastErr;
+    for (const display of candidates) {
+        try {
+            const { stdout } = await execAsync('wmctrl -lx', {
+                env: { ...process.env, DISPLAY: display },
+                timeout: 3000,
+            });
+            cachedDisplay = display;
+            return { display, stdout };
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    throw lastErr || new Error('No X display available (tried ' + candidates.join(', ') + ')');
+}
+
+// Best-effort display for focus/pin/launch commands that don't list windows.
+// Never throws — a wrong guess just makes the subsequent wmctrl command fail and
+// report its own error, and the next ide-projects poll re-detects the display.
+async function resolveDisplay() {
+    if (process.env.DISPLAY) return process.env.DISPLAY;
+    if (cachedDisplay) return cachedDisplay;
+    try {
+        const { display } = await wmctrlList();
+        return display;
+    } catch {
+        return ':1';
+    }
+}
+
 // Enumerate open IDE windows via a SINGLE `wmctrl -lx` call.
 //
 // Why wmctrl (not the old per-window xdotool loop): the previous approach ran
@@ -77,8 +130,8 @@ const WM_CLASS_TO_EDITOR = {
 // at once, so there's no per-window timeout to drop on. wmctrl also lists only
 // normal managed windows, so Cursor's auxiliary "cursor"-titled windows are
 // excluded for free.
-async function listIdeWindows(env) {
-    const { stdout } = await execAsync('wmctrl -lx', { env, timeout: 3000 });
+async function listIdeWindows() {
+    const { display, stdout } = await wmctrlList();
     const ideSuffixes = [' - cursor', ' - visual studio code', ' - code'];
     const results = [];
 
@@ -112,17 +165,15 @@ async function listIdeWindows(env) {
         });
     }
 
-    return results;
+    // Return the resolved display too, so focus commands hit the same one.
+    return { display, windows: results };
 }
 
 // GET /api/overlay/ide-projects - scan open IDE windows
 router.get('/ide-projects', async (req, res) => {
-    const env = { ...process.env };
-    if (!env.DISPLAY) env.DISPLAY = ':1';
-
     try {
-        const projects = await listIdeWindows(env);
-        res.json({ projects });
+        const { windows } = await listIdeWindows();
+        res.json({ projects: windows });
     } catch (error) {
         // Real failure (wmctrl missing / X unreachable). Report it instead of
         // returning an empty list, so the frontend can keep its last-good tabs.
@@ -138,9 +189,6 @@ router.post('/ide-projects/focus-by-name', async (req, res) => {
         return res.status(400).json({ success: false, error: 'projectName required' });
     }
 
-    const env = { ...process.env };
-    if (!env.DISPLAY) env.DISPLAY = ':1';
-
     // Match project names flexibly. projectName can be path-style
     // ("-home-ubuntu-Projects-ken-diadosis-docs") while the IDE window's
     // extracted name is just "diadosis-docs". "-" is both a path separator and
@@ -149,7 +197,8 @@ router.post('/ide-projects/focus-by-name', async (req, res) => {
     const projectNameLower = projectName.toLowerCase();
 
     try {
-        const windows = await listIdeWindows(env);
+        const { display, windows } = await listIdeWindows();
+        const env = { ...process.env, DISPLAY: display };
         for (const win of windows) {
             const extractedLower = win.project_name.toLowerCase();
             // exact match, endsWith, or dot-prefix folder (e.g. .claude → --claude)
@@ -178,8 +227,7 @@ router.post('/ide-projects/:id/focus', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid window id' });
     }
 
-    const env = { ...process.env };
-    if (!env.DISPLAY) env.DISPLAY = ':1';
+    const env = { ...process.env, DISPLAY: await resolveDisplay() };
 
     try {
         await execAsync(`wmctrl -i -a ${id}`, { env, timeout: 2000 });
