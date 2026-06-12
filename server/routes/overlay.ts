@@ -66,43 +66,97 @@ const WM_CLASS_TO_EDITOR = {
     'code.Code': 'vscode',
 };
 
-// Resolve which X DISPLAY actually has a window manager we can talk to.
+// Resolve which X DISPLAY actually has the user's desktop (and IDE windows) on it.
 //
-// The fallback here used to be a hardcoded ':1'. After a reboot the X server can
-// come up on a different display number (under DCV it's :0 one boot, :1 another),
-// and a hardcoded ':1' then hits "Cannot open display" → wmctrl returns nothing →
-// the UI shows "No IDE windows" even though the windows are right there. The X
-// socket dir (/tmp/.X11-unix) is empty under DCV's abstract sockets, so we can't
-// detect the live display by scanning the filesystem — instead we probe candidate
-// displays with `wmctrl -lx` and use the first that opens. The working display is
-// cached and tried first; if X later restarts under a live service the cached
-// display stops opening and the probe loop re-detects the new one (self-healing).
+// History of this resolution logic — both prior versions broke on a wrong
+// assumption about which displays exist:
+//   v1: hardcoded ':1' fallback → broke when DCV came up on a different number
+//       ("Cannot open display" → empty list).
+//   v2: probe :0/:1/:2, use the FIRST display that opens → broke when gdm's
+//       greeter Xorg sat on :0 accepting connections but managing zero windows,
+//       while the real DCV desktop was on :1. wmctrl on :0 succeeded with empty
+//       output, got cached, and the UI showed "No IDE windows" forever.
+// /tmp/.X11-unix can't disambiguate either (the greeter's socket looks the same
+// as the desktop's), so openability and socket presence are both insufficient.
+//
+// v3 (current): probe ALL candidates and pick by CONTENT — the display with IDE
+// windows wins; with none anywhere, the one managing the most windows (the real
+// desktop has Chrome/terminals; a greeter has nothing). The winner is cached and
+// trusted only while it still shows IDE windows; once it goes IDE-less we re-probe
+// every call, which is what makes a wrongly-cached empty display self-heal.
 const DISPLAY_CANDIDATES = [':0', ':1', ':2'];
 let cachedDisplay = null;
+// Result of the last full probe, exposed via /ide-projects for debuggability —
+// when the wrong display gets picked, this shows what each candidate looked like.
+let lastProbe = null;
 
-// Run `wmctrl -lx` against whichever display works, returning its stdout + the
-// display that produced it. Throws only when no candidate display opens at all.
+async function wmctrlOn(display) {
+    const { stdout } = await execAsync('wmctrl -lx', {
+        env: { ...process.env, DISPLAY: display },
+        timeout: 3000,
+    });
+    return stdout;
+}
+
+// Count managed windows / IDE windows in `wmctrl -lx` output.
+function countWindows(stdout) {
+    let total = 0;
+    let ide = 0;
+    for (const line of stdout.split('\n')) {
+        const m = line.match(/^0x[0-9a-fA-F]+\s+-?\d+\s+(\S+)\s/);
+        if (!m) continue;
+        total++;
+        if (WM_CLASS_TO_EDITOR[m[1]]) ide++;
+    }
+    return { total, ide };
+}
+
+// Run `wmctrl -lx` against the display that actually has the desktop on it,
+// returning its stdout + the display that produced it. Throws only when no
+// candidate display opens at all.
 async function wmctrlList() {
-    // An explicit DISPLAY (operator-set) wins and is the only candidate. Otherwise
-    // try the last-known-good display first, then the static candidate list.
-    const candidates = process.env.DISPLAY
-        ? [process.env.DISPLAY]
-        : [...new Set([cachedDisplay, ...DISPLAY_CANDIDATES].filter(Boolean))];
+    // An explicit DISPLAY (operator-set) wins and is the only candidate.
+    if (process.env.DISPLAY) {
+        const stdout = await wmctrlOn(process.env.DISPLAY);
+        return { display: process.env.DISPLAY, stdout };
+    }
 
-    let lastErr;
-    for (const display of candidates) {
+    // Fast path: the cached display is trusted only while it still has IDE
+    // windows. An IDE-less result falls through to the full probe — it may just
+    // mean all IDEs are closed, but it's also the signature of having cached a
+    // greeter display, and the probe distinguishes the two.
+    if (cachedDisplay) {
         try {
-            const { stdout } = await execAsync('wmctrl -lx', {
-                env: { ...process.env, DISPLAY: display },
-                timeout: 3000,
-            });
-            cachedDisplay = display;
-            return { display, stdout };
+            const stdout = await wmctrlOn(cachedDisplay);
+            if (countWindows(stdout).ide > 0) return { display: cachedDisplay, stdout };
+        } catch {
+            // cached display died (X restart) — fall through to re-probe
+        }
+    }
+
+    // Full probe: score every candidate, prefer IDE windows, then total windows.
+    let best = null;
+    let lastErr = null;
+    const probe = [];
+    for (const display of DISPLAY_CANDIDATES) {
+        try {
+            const stdout = await wmctrlOn(display);
+            const { total, ide } = countWindows(stdout);
+            probe.push({ display, windows: total, ideWindows: ide });
+            if (!best || ide > best.ide || (ide === best.ide && total > best.total)) {
+                best = { display, stdout, total, ide };
+            }
         } catch (err) {
+            probe.push({ display, error: err.message.split('\n')[0] });
             lastErr = err;
         }
     }
-    throw lastErr || new Error('No X display available (tried ' + candidates.join(', ') + ')');
+    lastProbe = probe;
+    if (!best) {
+        throw lastErr || new Error('No X display available (tried ' + DISPLAY_CANDIDATES.join(', ') + ')');
+    }
+    cachedDisplay = best.display;
+    return { display: best.display, stdout: best.stdout };
 }
 
 // Best-effort display for focus/pin/launch commands that don't list windows.
@@ -172,12 +226,14 @@ async function listIdeWindows() {
 // GET /api/overlay/ide-projects - scan open IDE windows
 router.get('/ide-projects', async (req, res) => {
     try {
-        const { windows } = await listIdeWindows();
-        res.json({ projects: windows });
+        const { display, windows } = await listIdeWindows();
+        // display/probe are diagnostics: which X display was picked and what each
+        // candidate looked like on the last full probe (see wmctrlList history).
+        res.json({ projects: windows, display, probe: lastProbe });
     } catch (error) {
         // Real failure (wmctrl missing / X unreachable). Report it instead of
         // returning an empty list, so the frontend can keep its last-good tabs.
-        res.status(500).json({ projects: [], error: error.message });
+        res.status(500).json({ projects: [], error: error.message, probe: lastProbe });
     }
 });
 
