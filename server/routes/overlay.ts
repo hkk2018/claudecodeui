@@ -1,6 +1,7 @@
 import express from 'express';
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
+import { readdirSync } from 'fs';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -79,12 +80,28 @@ const WM_CLASS_TO_EDITOR = {
 // /tmp/.X11-unix can't disambiguate either (the greeter's socket looks the same
 // as the desktop's), so openability and socket presence are both insufficient.
 //
-// v3 (current): probe ALL candidates and pick by CONTENT — the display with IDE
-// windows wins; with none anywhere, the one managing the most windows (the real
-// desktop has Chrome/terminals; a greeter has nothing). The winner is cached and
-// trusted only while it still shows IDE windows; once it goes IDE-less we re-probe
-// every call, which is what makes a wrongly-cached empty display self-heal.
-const DISPLAY_CANDIDATES = [':0', ':1', ':2'];
+// v3: probe ALL candidates and pick by CONTENT — the display with IDE windows
+// wins; with none anywhere, the one managing the most windows (the real desktop
+// has Chrome/terminals; a greeter has nothing). The winner is cached and trusted
+// only while it still shows IDE windows; once it goes IDE-less we re-probe every
+// call, which is what makes a wrongly-cached empty display self-heal.
+//
+// v4: candidates are discovered from /tmp/.X11-unix sockets, not a fixed list.
+// xrdp/Xvnc desktops sit on :10+ (a new xrdp machine put the IDEs on :10), which
+// the old [:0,:1,:2] list never probed → "No IDE windows". We still union in
+// :0–:2 as a fallback, and cap at <100 to skip xrdp chansrv sockets (:1001 etc).
+function getDisplayCandidates() {
+    const candidates = new Set([':0', ':1', ':2']);
+    try {
+        for (const name of readdirSync('/tmp/.X11-unix')) {
+            const m = name.match(/^X(\d+)$/);
+            if (m && Number(m[1]) < 100) candidates.add(':' + m[1]);
+        }
+    } catch {
+        // /tmp/.X11-unix unreadable — fall back to the seeded :0–:2
+    }
+    return [...candidates];
+}
 let cachedDisplay = null;
 // Result of the last full probe, exposed via /ide-projects for debuggability —
 // when the wrong display gets picked, this shows what each candidate looked like.
@@ -135,10 +152,11 @@ async function wmctrlList() {
     }
 
     // Full probe: score every candidate, prefer IDE windows, then total windows.
+    const candidates = getDisplayCandidates();
     let best = null;
     let lastErr = null;
     const probe = [];
-    for (const display of DISPLAY_CANDIDATES) {
+    for (const display of candidates) {
         try {
             const stdout = await wmctrlOn(display);
             const { total, ide } = countWindows(stdout);
@@ -153,7 +171,7 @@ async function wmctrlList() {
     }
     lastProbe = probe;
     if (!best) {
-        throw lastErr || new Error('No X display available (tried ' + DISPLAY_CANDIDATES.join(', ') + ')');
+        throw lastErr || new Error('No X display available (tried ' + candidates.join(', ') + ')');
     }
     cachedDisplay = best.display;
     return { display: best.display, stdout: best.stdout };
