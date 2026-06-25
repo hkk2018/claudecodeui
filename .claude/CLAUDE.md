@@ -15,6 +15,19 @@ last_modified: "2026-05-31 16:25"
 | 9001 | 開發測試版 | 本地 repo (`/home/ubuntu/Projects/ken/claudecodeui`) | `claude-code-ui-dev` |
 | 9002 | 穩定回退版 | npm package (`@siteboon/claude-code-ui@1.10.5`) | `claude-code-ui` |
 
+## 系統依賴（apt 套件，⚠️ 不在版控）
+
+IDE overlay 功能（列出/聚焦/置頂桌面上的 Cursor / VS Code 窗口，`server/routes/overlay.ts`）依賴以下**系統執行檔**。它們是 apt 套件，不是 npm 依賴，`pnpm install` 不會帶上 — 換機器或重灌系統必須手動補裝：
+
+```bash
+sudo apt install -y wmctrl   # 列窗 / 聚焦 / 置頂（核心，缺了會「No IDE windows」）
+sudo apt install -y xdotool  # 舊版列窗用，部分輔助操作仍可能用到
+```
+
+**症狀對照**：UI 一直顯示「No IDE windows」、`/api/overlay/ide-projects` 回 500 而 X display 偵測看起來正常 → 多半是 `wmctrl` 沒裝（`command -v wmctrl` 確認）。code 無條件呼叫 `wmctrl -lx`，缺執行檔會 ENOENT，所有候選 display 一起失敗。
+
+> 踩坑紀錄：列窗邏輯從 xdotool 改成 wmctrl（commit 1e81158 起）後，這台機器一直沒裝 wmctrl，導致「No IDE windows」。2026-06-25 補裝 wmctrl 後恢復；同時補上此依賴說明。
+
 ## 更新測試流程
 
 當你修改了前端程式碼，需要部署到 port 9001 測試時，執行以下步驟：
