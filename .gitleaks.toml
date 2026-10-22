@@ -1,0 +1,29 @@
+# claudecodeui .gitleaks.toml — commit-time + full-history secret scan allowlist
+# WHAT: false-positive baseline from the full-history scan (tech-center
+#       #10692 public-repo pre-push rollout, 2026-10-23) — 8 raw matches,
+#       all triaged and confirmed false positive.
+# WHY:  allowlist by COMMIT, never by the matched secret VALUE.
+
+[extend]
+useDefault = true
+
+[allowlist]
+# - src/i18n/locales/*/settings.json + src/components/settings/
+#   PermissionsContent.jsx — localized UI help text describing Claude
+#   Code's sandboxMode/approvalPolicy settings (config-shaped prose, not
+#   an actual credential).
+# - .github/workflows/SECURITY_SCANNING.md — this repo's OWN docs showing
+#   an illustrative "this gets detected and blocked" example with fake
+#   placeholder secrets (sk-proj-abc123..., and the AWS
+#   AKIAIOSFODNN7EXAMPLE-style placeholder already in gitleaks' own
+#   default allowlist).
+commits = [
+  "0517ee609ee6d4568bbdcddb2c541addc7ec7670",
+  "40b3ddc497e29a655eebde852a45b785632c1493",
+  "86b6545c3505475ac2de0cec75cc8f86ab22aceb",
+  "89b754d186b68f3df8aa439a2d535644406066f0",
+  "a7299c68237908c752d504c2e8eea91570a30203",
+  "c7dcba8d9117e84db8aac7d8a7bf6a3aa683e115",
+  "cf3d23ee31fe56514aeb150428cf662d2d0f4b69",
+  "fbbf7465fbe0ee96a9944d610a81f8661bf0cb48",
+]
